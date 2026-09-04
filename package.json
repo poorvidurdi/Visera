@@ -1,0 +1,14 @@
+{
+  "name": "visera",
+  "version": "1.0.0",
+  "description": "Visera real-time market change detector and notification service",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
