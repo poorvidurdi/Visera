@@ -1,11 +1,751 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visera</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visera · Market Watchlist</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0d0f12;
+      --surface:      #13161b;
+      --surface-hi:   #1a1e26;
+      --border:       #252b35;
+      --border-hi:    #334155;
+      --text:         #c9d1dc;
+      --text-dim:     #6b7a8f;
+      --text-faint:   #3d4757;
+      --accent:       #4a9eff;
+      --accent-dim:   #1e3a5f;
+
+      --sig:     #ff4d4d;
+      --notable: #f59e0b;
+      --new:     #4a9eff;
+      --quiet:   #3d4757;
+
+      --pos:  #22c55e;
+      --neg:  #ef4444;
+      --flat: #6b7a8f;
+
+      --mono: 'Courier New', 'Menlo', 'Consolas', monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+      --row-h: 2.4rem;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    ::-webkit-scrollbar             { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track       { background: var(--bg); }
+    ::-webkit-scrollbar-thumb       { background: var(--border-hi); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+    #app {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1rem 4rem;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: .5rem;
+      padding: 1.5rem 0 1rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.25rem;
+    }
+
+    .header-left { display: flex; flex-direction: column; gap: .2rem; }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      color: #e2e8f0;
+    }
+
+    h1 span.dot { color: var(--accent); }
+
+    .tagline {
+      font-size: .72rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .72rem;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+
+    .pulse {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--flat);
+      animation: none;
+    }
+
+    .pulse.live  { background: var(--pos); animation: blink 2s ease-in-out infinite; }
+    .pulse.error { background: var(--neg); }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .3; }
+    }
+
+    #controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: .6rem;
+      margin-bottom: 1.25rem;
+    }
+
+    #add-form {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      flex: 1 1 auto;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: .82rem;
+      padding: .35rem .6rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+
+    input::placeholder { color: var(--text-faint); }
+
+    #inp-symbol {
+      width: 7rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    #inp-alert { width: 7rem; }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: .78rem;
+      padding: .35rem .75rem;
+      transition: background .12s, border-color .12s, color .12s;
+      white-space: nowrap;
+    }
+
+    button:hover  { background: var(--surface-hi); border-color: var(--border-hi); }
+    button:active { filter: brightness(.88); }
+
+    button.primary {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: #93c5fd;
+    }
+
+    button.primary:hover { background: #1e4a8a; border-color: #6ab0ff; }
+
+    button.danger-ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-faint);
+      padding: .25rem .45rem;
+      font-size: .72rem;
+    }
+
+    button.danger-ghost:hover { color: var(--neg); }
+
+    button.seen-btn {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-faint);
+      padding: .25rem .45rem;
+      font-size: .72rem;
+    }
+
+    button.seen-btn:hover { color: var(--pos); }
+
+    button.mark-all {
+      font-size: .72rem;
+      padding: .32rem .65rem;
+      border-color: var(--border-hi);
+      color: var(--text-dim);
+    }
+
+    button.mark-all:hover { color: var(--pos); border-color: var(--pos); }
+
+    button[disabled] { opacity: .35; cursor: not-allowed; }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      margin: 1.2rem 0 .4rem;
+      padding-bottom: .3rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-head .bucket-label {
+      font-size: .68rem;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .section-head .bucket-count {
+      font-size: .68rem;
+      font-family: var(--mono);
+      color: var(--text-dim);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 0 .4rem;
+      line-height: 1.6;
+    }
+
+    .bucket-sig     .bucket-label { color: var(--sig); }
+    .bucket-notable .bucket-label { color: var(--notable); }
+    .bucket-new     .bucket-label { color: var(--new); }
+    .bucket-quiet   .bucket-label { color: var(--text-dim); }
+
+    .symbol-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .sym-row {
+      display: flex;
+      flex-direction: column;
+      border-left: 3px solid var(--border);
+      background: var(--surface);
+      transition: background .1s;
+    }
+
+    .sym-row:hover { background: var(--surface-hi); }
+
+    .sym-row.bucket-sig     { border-left-color: var(--sig); }
+    .sym-row.bucket-notable { border-left-color: var(--notable); }
+    .sym-row.bucket-new     { border-left-color: var(--new); }
+    .sym-row.bucket-quiet   { border-left-color: var(--quiet); }
+
+    .row-main {
+      display: grid;
+      grid-template-columns: 6rem 7rem 6rem 1fr 8rem 6.5rem;
+      align-items: center;
+      min-height: 2.4rem;
+      padding: 0 .5rem;
+    }
+
+    .cell {
+      padding: .3rem .5rem;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .cell-sym {
+      font-family: var(--mono);
+      font-size: .85rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      color: #e2e8f0;
+    }
+
+    .cell-price {
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .cell-pct {
+      font-family: var(--mono);
+      font-size: .82rem;
+      text-align: right;
+    }
+
+    .cell-pct.pos  { color: var(--pos); }
+    .cell-pct.neg  { color: var(--neg); }
+    .cell-pct.flat { color: var(--flat); }
+
+    .cell-reasons {
+      font-size: .72rem;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .reason-tag {
+      display: inline-block;
+      background: var(--surface-hi);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 0 .35rem;
+      margin-right: .25rem;
+      font-size: .68rem;
+      letter-spacing: .02em;
+      vertical-align: middle;
+      line-height: 1.7;
+    }
+
+    .bucket-sig     .reason-tag { border-color: #4d1a1a; color: #fca5a5; }
+    .bucket-notable .reason-tag { border-color: #4d3800; color: #fcd34d; }
+    .bucket-new     .reason-tag { border-color: #1a3a5c; color: #93c5fd; }
+
+    .cell-alert {
+      display: flex;
+      align-items: center;
+      gap: .25rem;
+    }
+
+    .alert-input {
+      width: 5.5rem;
+      font-size: .75rem;
+      padding: .2rem .4rem;
+      font-family: var(--mono);
+    }
+
+    .alert-save {
+      font-size: .65rem;
+      padding: .18rem .35rem;
+      border-radius: 2px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: #93c5fd;
+      cursor: pointer;
+      display: none;
+    }
+
+    .alert-save.visible { display: inline-block; }
+
+    .cell-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .1rem;
+    }
+
+    .empty-state {
+      padding: 3rem 1rem;
+      text-align: center;
+      color: var(--text-faint);
+      font-size: .8rem;
+      letter-spacing: .05em;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: #2a0e0e;
+      border: 1px solid var(--neg);
+      color: #fca5a5;
+      font-size: .78rem;
+      padding: .6rem 1rem;
+      border-radius: 4px;
+      max-width: 320px;
+      display: none;
+      z-index: 9999;
+      font-family: var(--mono);
+    }
+
+    #toast.show { display: block; animation: fadein .2s ease; }
+
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(.5rem); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 640px) {
+      .row-main { grid-template-columns: 5rem 5.5rem 4.5rem 1fr 6rem 5.5rem; }
+      #inp-symbol { width: 5.5rem; }
+      #inp-alert  { width: 5.5rem; }
+    }
+  </style>
 </head>
 <body>
-  <h1>Visera Frontend</h1>
+
+<div id="app">
+
+  <header>
+    <div class="header-left">
+      <h1>VISE<span class="dot">R</span>A</h1>
+      <div class="tagline">market signal monitor &middot; anomaly watchlist</div>
+    </div>
+    <div class="header-right">
+      <div id="status-bar">
+        <span class="pulse" id="pulse"></span>
+        <span id="status-text">connecting&hellip;</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="controls">
+    <form id="add-form" onsubmit="handleAddSymbol(event)">
+      <input
+        id="inp-symbol"
+        type="text"
+        placeholder="TICKER"
+        autocomplete="off"
+        spellcheck="false"
+        maxlength="12"
+        required
+      />
+      <input
+        id="inp-alert"
+        type="number"
+        placeholder="alert $"
+        step="0.01"
+        min="0"
+      />
+      <button type="submit" class="primary" id="btn-add">+ Add</button>
+    </form>
+
+    <button class="mark-all" id="btn-mark-all" onclick="handleMarkAll()">
+      &#10003; Mark all seen
+    </button>
+  </div>
+
+  <div id="feed">
+    <div class="empty-state">Loading&hellip;</div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================================
+   Visera — single-file vanilla frontend
+   API endpoints consumed:
+     POST   /api/session                          body { userId? }
+     POST   /api/watchlist/:userId                body { symbol, alertPrice? }
+     DELETE /api/watchlist/:userId/:symbol
+     PUT    /api/watchlist/:userId/:symbol/alert  body { alertPrice }
+     GET    /api/changes/:userId
+     POST   /api/ack/:userId/:symbol
+     POST   /api/ack-all/:userId
+   ========================================================================= */
+
+const POLL_MS     = 5000;
+const BUCKET_ORD  = ['significant', 'notable', 'new', 'quiet'];
+const BUCKET_META = {
+  significant: { label: 'Significant',  cls: 'bucket-sig' },
+  notable:     { label: 'Notable',      cls: 'bucket-notable' },
+  new:         { label: 'New / Unseen', cls: 'bucket-new' },
+  quiet:       { label: 'Quiet',        cls: 'bucket-quiet' },
+};
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+let userId    = null;
+let pollTimer = null;
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+
+(async function boot() {
+  userId = await initSession();
+  if (!userId) return;
+  await fetchAndRender();
+  schedulePoll();
+})();
+
+// ── Session ────────────────────────────────────────────────────────────────
+
+async function initSession() {
+  const stored = localStorage.getItem('visera_userId');
+  try {
+    const res  = await api('/api/session', {
+      method: 'POST',
+      body: JSON.stringify({ userId: stored || undefined }),
+    });
+    const data = await res.json();
+    if (!data.userId) throw new Error('No userId');
+    localStorage.setItem('visera_userId', data.userId);
+    return data.userId;
+  } catch (e) {
+    setStatus('error', 'session failed');
+    toast('Session error: ' + e.message);
+    return null;
+  }
+}
+
+// ── Polling ────────────────────────────────────────────────────────────────
+
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    await fetchAndRender();
+    schedulePoll();
+  }, POLL_MS);
+}
+
+async function fetchAndRender() {
+  try {
+    const res  = await api('/api/changes/' + userId);
+    const data = await res.json();
+    render(data.changes || []);
+    setStatus('live', 'updated ' + fmtTime());
+  } catch (e) {
+    setStatus('error', 'fetch error');
+    toast('Poll error: ' + e.message);
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+
+function render(changes) {
+  const feed = document.getElementById('feed');
+  if (!changes || changes.length === 0) {
+    feed.innerHTML = '<div class="empty-state">Watchlist is empty &mdash; add a ticker above.</div>';
+    return;
+  }
+
+  const groups = {};
+  for (const b of BUCKET_ORD) groups[b] = [];
+  for (const c of changes) {
+    const key = groups[c.bucket] !== undefined ? c.bucket : 'quiet';
+    groups[key].push(c);
+  }
+
+  let html = '';
+  for (const bucket of BUCKET_ORD) {
+    const items = groups[bucket];
+    if (!items.length) continue;
+    const m = BUCKET_META[bucket];
+    html +=
+      '<div class="section-head ' + m.cls + '">' +
+        '<span class="bucket-label">' + m.label + '</span>' +
+        '<span class="bucket-count">' + items.length + '</span>' +
+      '</div>' +
+      '<ul class="symbol-list">';
+    for (const item of items) html += buildRow(item, bucket);
+    html += '</ul>';
+  }
+
+  feed.innerHTML = html;
+
+  feed.querySelectorAll('.alert-input').forEach(function(inp) {
+    inp.addEventListener('input', onAlertChange);
+    inp.addEventListener('keydown', onAlertKey);
+  });
+}
+
+function buildRow(item, bucket) {
+  var m        = BUCKET_META[bucket];
+  var sym      = item.symbol;
+  var snap     = item.snapshot;
+  var price    = snap && snap.price != null ? Number(snap.price) : NaN;
+  var pct      = Number(item.pctMoveSinceLastSeen || 0);
+  var alert    = item.alertPrice != null ? Number(item.alertPrice) : '';
+  var reasons  = Array.isArray(item.reasons) ? item.reasons : [];
+
+  var priceStr = isNaN(price) ? '&mdash;' : fmtPrice(price);
+  var pctStr   = fmtPct(pct);
+  var pctCls   = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
+  var pctArrow = pct > 0.001 ? '&#9650;' : pct < -0.001 ? '&#9660;' : '';
+
+  var rHtml = reasons.length
+    ? reasons.map(function(r) { return '<span class="reason-tag">' + esc(shortR(r)) + '</span>'; }).join('')
+    : '<span style="color:var(--text-faint);font-size:.68rem">&mdash;</span>';
+
+  var alertVal = alert !== '' ? alert : '';
+
+  return (
+    '<li class="sym-row ' + m.cls + '" data-symbol="' + esc(sym) + '">' +
+      '<div class="row-main">' +
+        '<div class="cell cell-sym">'   + esc(sym)    + '</div>' +
+        '<div class="cell cell-price">' + priceStr    + '</div>' +
+        '<div class="cell cell-pct '   + pctCls + '">' + pctArrow + pctStr + '</div>' +
+        '<div class="cell cell-reasons">' + rHtml + '</div>' +
+        '<div class="cell cell-alert">' +
+          '<input class="alert-input" type="number" step="0.01" min="0" ' +
+            'placeholder="alert" value="' + alertVal + '" ' +
+            'data-orig="' + alertVal + '" data-sym="' + esc(sym) + '" />' +
+          '<button class="alert-save" onclick="doAlertSave(this)" title="Save">&#10003;</button>' +
+        '</div>' +
+        '<div class="cell cell-actions">' +
+          '<button class="seen-btn" onclick="doSeen(\'' + esc(sym) + '\')" title="Mark seen">&#10003;&nbsp;seen</button>' +
+          '<button class="danger-ghost" onclick="doRemove(\'' + esc(sym) + '\')" title="Remove">&#10005;</button>' +
+        '</div>' +
+      '</div>' +
+    '</li>'
+  );
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────
+
+async function handleAddSymbol(e) {
+  e.preventDefault();
+  var symEl   = document.getElementById('inp-symbol');
+  var alertEl = document.getElementById('inp-alert');
+  var btn     = document.getElementById('btn-add');
+  var sym     = symEl.value.trim().toUpperCase();
+  if (!sym) return;
+  var ap = alertEl.value !== '' ? parseFloat(alertEl.value) : undefined;
+  btn.disabled = true;
+  try {
+    var body = { symbol: sym };
+    if (ap != null && !isNaN(ap)) body.alertPrice = ap;
+    var res = await api('/api/watchlist/' + userId, { method: 'POST', body: JSON.stringify(body) });
+    if (!res.ok) { var err = await res.json().catch(function(){return{};}); throw new Error(err.error || 'HTTP ' + res.status); }
+    symEl.value = ''; alertEl.value = ''; symEl.focus();
+    await fetchAndRender();
+  } catch (err) { toast('Add failed: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
+async function doRemove(sym) {
+  try {
+    var res = await api('/api/watchlist/' + userId + '/' + encodeURIComponent(sym), { method: 'DELETE' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    await fetchAndRender();
+  } catch (err) { toast('Remove failed: ' + err.message); }
+}
+
+async function doSeen(sym) {
+  try {
+    var res = await api('/api/ack/' + userId + '/' + encodeURIComponent(sym), { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    await fetchAndRender();
+  } catch (err) { toast('Ack failed: ' + err.message); }
+}
+
+async function handleMarkAll() {
+  var btn = document.getElementById('btn-mark-all');
+  btn.disabled = true;
+  try {
+    var res = await api('/api/ack-all/' + userId, { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    await fetchAndRender();
+  } catch (err) { toast('Mark-all failed: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
+function onAlertChange(e) {
+  var inp = e.currentTarget;
+  var btn = inp.nextElementSibling;
+  inp.value !== inp.dataset.orig
+    ? btn.classList.add('visible')
+    : btn.classList.remove('visible');
+}
+
+function onAlertKey(e) {
+  var inp = e.currentTarget;
+  var btn = inp.nextElementSibling;
+  if (e.key === 'Enter' && btn.classList.contains('visible')) { btn.click(); return; }
+  if (e.key === 'Escape') { inp.value = inp.dataset.orig; btn.classList.remove('visible'); inp.blur(); }
+}
+
+async function doAlertSave(btn) {
+  var inp = btn.previousElementSibling;
+  var sym = inp.dataset.sym;
+  var ap  = inp.value !== '' ? parseFloat(inp.value) : 0;
+  btn.disabled = true;
+  try {
+    var res = await api('/api/watchlist/' + userId + '/' + encodeURIComponent(sym) + '/alert',
+      { method: 'PUT', body: JSON.stringify({ alertPrice: ap }) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    inp.dataset.orig = inp.value;
+    btn.classList.remove('visible');
+    await fetchAndRender();
+  } catch (err) { toast('Alert save failed: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
+// ── API ────────────────────────────────────────────────────────────────────
+
+function api(path, opts) {
+  return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
+}
+
+// ── Status ─────────────────────────────────────────────────────────────────
+
+function setStatus(state, text) {
+  document.getElementById('pulse').className = 'pulse' + (state === 'live' ? ' live' : state === 'error' ? ' error' : '');
+  document.getElementById('status-text').textContent = text;
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+
+var toastTimer = null;
+function toast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 5000);
+}
+
+// ── Formatters ─────────────────────────────────────────────────────────────
+
+function fmtPrice(n) {
+  if (isNaN(n)) return '&mdash;';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtPct(n) {
+  if (isNaN(n) || Math.abs(n) < 0.001) return '0.00%';
+  return Math.abs(n).toFixed(2) + '%';
+}
+
+function shortR(r) {
+  return r
+    .replace('Volatility-normalized price move', 'Vol-norm move')
+    .replace('Volume anomaly detected', 'Vol anomaly')
+    .replace('Crossed 52-week high', '52w high x')
+    .replace('Crossed 52-week low',  '52w low x')
+    .replace(/Crossed alert price \(([^)]+)\)/, 'Alert @ $1');
+}
+
+function fmtTime() {
+  return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
 </body>
 </html>

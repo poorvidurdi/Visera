@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/*
+
+# Lockfile (committed separately if desired; exclude here for flexibility)
+package-lock.json
+
+# Runtime data store
+data.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
