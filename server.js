@@ -122,8 +122,10 @@ app.put('/api/watchlist/:userId/:symbol/alert', (req, res) => {
   const { userId, symbol } = req.params;
   const { alertPrice }     = req.body || {};
 
-  if (alertPrice === undefined || alertPrice === null) {
-    return res.status(400).json({ error: 'alertPrice is required' });
+  // undefined means the key was not sent at all — that is a client error.
+  // null is valid: it means "clear the alert threshold".
+  if (alertPrice === undefined) {
+    return res.status(400).json({ error: 'alertPrice is required (send null to clear)' });
   }
 
   const watchlist = db.setAlertPrice(userId, symbol, alertPrice);
@@ -221,6 +223,91 @@ app.post('/api/ack-all/:userId', (req, res) => {
 
   res.json({ userId, acked });
 });
+
+// ─── Dev-only debug routes ─────────────────────────────────────────────────
+
+/**
+ * POST /api/debug/force-price/:symbol
+ * GUARDED: only registered when NODE_ENV !== 'production'.
+ *
+ * Body: {
+ *   price   : number   – new price to inject (required)
+ *   high52? : number   – override the 52-week high before applying price
+ *   low52?  : number   – override the 52-week low  before applying price
+ * }
+ *
+ * What it does:
+ *   1. Calls feed.forcePrice() → sets price in marketFeed and emits a 'tick'
+ *      (so any open WebSocket clients subscribed to the symbol get a live update)
+ *   2. For every user that holds the symbol in their watchlist, runs
+ *      computeChange against their lastSeen so you can immediately verify
+ *      alert-crossing / 52w-high / 52w-low / vol-norm reasons without polling.
+ *
+ * Response: {
+ *   snapshot : <the snapshot that was injected>,
+ *   crossings: [{ userId, symbol, bucket, score, reasons, pctMoveSinceLastSeen }]
+ * }
+ *
+ * Usage examples:
+ *   # Force AAPL to $200 (triggers 52w-high cross if lastSeen was below 199.62)
+ *   curl -X POST http://localhost:3000/api/debug/force-price/AAPL \
+ *        -H 'Content-Type: application/json' -d '{"price":200}'
+ *
+ *   # Push AAPL below its 52w low by also resetting the low reference
+ *   curl -X POST http://localhost:3000/api/debug/force-price/AAPL \
+ *        -H 'Content-Type: application/json' -d '{"price":160,"low52":165}'
+ *
+ *   # Test alert crossing: set alert to 190 first, then force price through it
+ *   # PUT /api/watchlist/:userId/AAPL/alert  {"alertPrice":190}
+ *   # POST /api/debug/force-price/AAPL      {"price":191}
+ */
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/api/debug/force-price/:symbol', (req, res) => {
+    const sym   = String(req.params.symbol || '').trim().toUpperCase();
+    const body  = req.body || {};
+    const price = parseFloat(body.price);
+
+    if (!sym) {
+      return res.status(400).json({ error: 'symbol is required' });
+    }
+    if (isNaN(price) || price <= 0) {
+      return res.status(400).json({ error: 'price must be a positive number' });
+    }
+
+    // Ensure the symbol exists in the feed first
+    feed.ensureSymbol(sym);
+
+    const opts = {};
+    if (body.high52 !== undefined) opts.high52 = parseFloat(body.high52);
+    if (body.low52  !== undefined) opts.low52  = parseFloat(body.low52);
+
+    const snapshot = feed.forcePrice(sym, price, opts);
+    if (!snapshot) {
+      return res.status(500).json({ error: 'forcePrice returned null — symbol may not have initialised' });
+    }
+
+    // Run computeChange against every user that has this symbol in their watchlist
+    // so the caller can see crossing results without a separate /api/changes call.
+    const crossings = db.getUsersWatchingSymbol(sym).map(userId => {
+      const item     = db.getWatchlist(userId).find(i => i.symbol === sym);
+      const lastSeen = db.getLastSeen(userId, sym);
+      const result   = computeChange(snapshot, lastSeen, item ? item.alertPrice : null);
+      return {
+        userId,
+        symbol: sym,
+        alertPrice:           item ? item.alertPrice : null,
+        bucket:               result.bucket,
+        score:                result.score,
+        reasons:              result.reasons,
+        pctMoveSinceLastSeen: result.pctMoveSinceLastSeen,
+      };
+    });
+
+    res.json({ snapshot, crossings });
+  });
+
+  console.log('[dev] Debug route active: POST /api/debug/force-price/:symbol');
+}
 
 // ─── WebSocket server ──────────────────────────────────────────────────────────
 

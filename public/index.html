@@ -115,6 +115,44 @@
       50%       { opacity: .3; }
     }
 
+    /* WebSocket connection-status pill */
+    #ws-status {
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      font-size: .7rem;
+      font-family: var(--mono);
+      padding: .15rem .5rem;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-dim);
+      white-space: nowrap;
+      transition: color .2s, border-color .2s;
+    }
+
+    #ws-status .ws-dot {
+      display: inline-block;
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--flat);
+      flex-shrink: 0;
+    }
+
+    #ws-status.ws-live         { color: var(--pos); border-color: #166534; }
+    #ws-status.ws-live .ws-dot { background: var(--pos); animation: blink 2s ease-in-out infinite; }
+
+    #ws-status.ws-reconnecting         { color: var(--notable); border-color: #78350f; }
+    #ws-status.ws-reconnecting .ws-dot { background: var(--notable); }
+
+    /* Flash animation when a tick arrives for a row */
+    @keyframes tickFlash {
+      0%   { background: transparent; }
+      30%  { background: rgba(74, 158, 255, .15); }
+      100% { background: transparent; }
+    }
+    .tick-flash { animation: tickFlash .45s ease-out; }
+
     #controls {
       display: flex;
       align-items: center;
@@ -414,6 +452,10 @@
       <div class="tagline">market signal monitor &middot; anomaly watchlist</div>
     </div>
     <div class="header-right">
+      <div id="ws-status" title="WebSocket live-tick connection">
+        <span class="ws-dot"></span>
+        <span id="ws-status-text">connecting</span>
+      </div>
       <div id="status-bar">
         <span class="pulse" id="pulse"></span>
         <span id="status-text">connecting&hellip;</span>
@@ -482,6 +524,12 @@ const BUCKET_META = {
 let userId    = null;
 let pollTimer = null;
 
+// WebSocket live-tick state
+let ws              = null;   // active WebSocket (or null)
+let wsReconnTimer   = null;   // pending reconnect setTimeout handle
+let wsWatchedSyms   = [];     // symbols currently subscribed on the socket
+let wsInitialised   = false;  // true after first successful /api/changes fetch
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 
 (async function boot() {
@@ -525,12 +573,138 @@ async function fetchAndRender() {
   try {
     const res  = await api('/api/changes/' + userId);
     const data = await res.json();
-    render(data.changes || []);
+    const changes = data.changes || [];
+    render(changes);
     setStatus('live', 'updated ' + fmtTime());
+
+    // ── WebSocket bootstrap / resubscribe ──────────────────────────────────
+    // Derive live symbol list from the rendered changes so we never need a
+    // separate watchlist fetch — the changes response is the source of truth.
+    const syms = changes.map(function(c) { return c.symbol; });
+    wsWatchedSyms = syms;
+
+    if (!wsInitialised) {
+      wsInitialised = true;
+      wsConnect();                      // open socket for the first time
+    } else {
+      wsSend({ type: 'subscribe', symbols: syms }); // re-subscribe (list may have changed)
+    }
   } catch (e) {
     setStatus('error', 'fetch error');
     toast('Poll error: ' + e.message);
   }
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+
+const WS_RECONNECT_MS = 1500;
+
+/**
+ * Build a ws:// (or wss://) URL that mirrors the current page origin.
+ */
+function wsUrl() {
+  var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return proto + '://' + location.host + '/ws';
+}
+
+/**
+ * Send a JSON message if the socket is open; silently drop otherwise.
+ */
+function wsSend(msg) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+  }
+}
+
+/**
+ * Update the #ws-status pill in the header.
+ * @param {'live'|'reconnecting'} state
+ * @param {string} label
+ */
+function wsSetStatus(state, label) {
+  var el = document.getElementById('ws-status');
+  var tx = document.getElementById('ws-status-text');
+  el.className = state === 'live' ? 'ws-live' : 'ws-reconnecting';
+  tx.textContent = label;
+}
+
+/**
+ * Open the WebSocket and wire up all handlers.
+ * Calling this again while a socket is already open is a no-op (guarded by
+ * readyState check) so it is safe to call from reconnect paths.
+ */
+function wsConnect() {
+  // Prevent double-connect if called while a socket is already alive
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+  clearTimeout(wsReconnTimer);
+  wsSetStatus('reconnecting', 'connecting…');
+
+  ws = new WebSocket(wsUrl());
+
+  ws.addEventListener('open', function() {
+    wsSetStatus('live', 'live');
+    // Send current symbol list immediately on (re)connect
+    wsSend({ type: 'subscribe', symbols: wsWatchedSyms });
+  });
+
+  ws.addEventListener('message', function(event) {
+    var msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg && msg.type === 'tick' && msg.data) {
+      applyTick(msg.data);
+    }
+  });
+
+  ws.addEventListener('close', function() {
+    wsSetStatus('reconnecting', 'reconnecting…');
+    ws = null;
+    // Auto-reconnect with fixed 1.5s backoff
+    wsReconnTimer = setTimeout(wsConnect, WS_RECONNECT_MS);
+  });
+
+  ws.addEventListener('error', function() {
+    // 'close' fires right after 'error', so reconnect logic lives there
+  });
+}
+
+/**
+ * Surgical tick update: update ONLY the .cell-price and .cell-pct cells
+ * for the matching [data-symbol] row.  No re-render, no re-scoring.
+ * The pctMoveSinceLastSeen comes from the server (snapshot.pctMove) when
+ * provided; if absent the cell keeps its current server-rendered value.
+ *
+ * @param {{ symbol: string, price: number, pctMove?: number }} snap
+ */
+function applyTick(snap) {
+  var sym = snap && snap.symbol ? String(snap.symbol).toUpperCase() : null;
+  if (!sym) return;
+
+  // querySelector is fast enough; selector is specific
+  var row = document.querySelector('.sym-row[data-symbol="' + sym + '"]');
+  if (!row) return;
+
+  var priceCell = row.querySelector('.cell-price');
+  var pctCell   = row.querySelector('.cell-pct');
+
+  if (priceCell && snap.price != null && !isNaN(Number(snap.price))) {
+    priceCell.textContent = fmtPrice(Number(snap.price));
+  }
+
+  // Only update the pct cell if the server sends pctMove on the tick
+  if (pctCell && snap.pctMove != null && !isNaN(Number(snap.pctMove))) {
+    var pct      = Number(snap.pctMove);
+    var pctCls   = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
+    var pctArrow = pct > 0.001 ? '▲' : pct < -0.001 ? '▼' : '';
+    pctCell.className   = 'cell cell-pct ' + pctCls;
+    pctCell.textContent = pctArrow + fmtPct(pct);
+  }
+
+  // Briefly highlight the row so the user can see what changed
+  row.classList.remove('tick-flash');
+  // Force reflow to restart the animation
+  void row.offsetWidth;
+  row.classList.add('tick-flash');
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -681,12 +855,15 @@ function onAlertKey(e) {
 async function doAlertSave(btn) {
   var inp = btn.previousElementSibling;
   var sym = inp.dataset.sym;
-  var ap  = inp.value !== '' ? parseFloat(inp.value) : 0;
+  // Empty input → null (clears the alert). A zero value is treated the same
+  // way because changeDetector requires alertPrice > 0 to fire.
+  var ap  = inp.value !== '' ? parseFloat(inp.value) : null;
+  if (ap !== null && isNaN(ap)) { toast('Invalid alert price'); return; }
   btn.disabled = true;
   try {
     var res = await api('/api/watchlist/' + userId + '/' + encodeURIComponent(sym) + '/alert',
       { method: 'PUT', body: JSON.stringify({ alertPrice: ap }) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) { var e = await res.json().catch(function(){return{};}); throw new Error(e.error || 'HTTP ' + res.status); }
     inp.dataset.orig = inp.value;
     btn.classList.remove('visible');
     await fetchAndRender();
