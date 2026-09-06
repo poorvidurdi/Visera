@@ -224,6 +224,40 @@ app.post('/api/ack-all/:userId', (req, res) => {
   res.json({ userId, acked });
 });
 
+/**
+ * GET /api/symbols
+ * Returns a list of all known ticker symbols (seed data + any dynamically added ones)
+ * along with a human-readable company/asset name for use in the autocomplete UI.
+ * Response: { symbols: [{ symbol, name }] }
+ */
+const SYMBOL_NAMES = {
+  AAPL:     'Apple Inc.',
+  MSFT:     'Microsoft Corporation',
+  GOOGL:    'Alphabet Inc. (Google)',
+  AMZN:     'Amazon.com Inc.',
+  NVDA:     'NVIDIA Corporation',
+  META:     'Meta Platforms Inc.',
+  TSLA:     'Tesla Inc.',
+  JPM:      'JPMorgan Chase & Co.',
+  BTCUSDT:  'Bitcoin / USDT',
+  ETHUSDT:  'Ethereum / USDT',
+  RELIANCE: 'Reliance Industries Ltd.',
+  TCS:      'Tata Consultancy Services',
+  INFY:     'Infosys Ltd.',
+};
+
+app.get('/api/symbols', (req, res) => {
+  // Merge seeded names with any extra symbols the feed has picked up
+  const allSnapshots = feed.getSnapshot();   // returns { SYM: snap, … } when called with no arg
+  const all = Object.keys(allSnapshots).map(sym => ({
+    symbol: sym,
+    name: SYMBOL_NAMES[sym] || sym,
+  }));
+  // Sort alphabetically
+  all.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  res.json({ symbols: all });
+});
+
 // ─── Dev-only debug routes ─────────────────────────────────────────────────
 
 /**
@@ -318,6 +352,7 @@ if (process.env.NODE_ENV !== 'production') {
  */
 wss.on('connection', ws => {
   ws.subscribedSymbols = new Set();
+  ws.userId = null;  // set when client sends its first subscribe message
 
   ws.on('message', raw => {
     let msg;
@@ -328,6 +363,11 @@ wss.on('connection', ws => {
     }
 
     if (msg && msg.type === 'subscribe' && Array.isArray(msg.symbols)) {
+      // Persist the userId so the tick fan-out can do per-user crossing checks
+      if (msg.userId && typeof msg.userId === 'string') {
+        ws.userId = msg.userId.trim();
+      }
+
       // Replace subscription set with the new list
       ws.subscribedSymbols = new Set(
         msg.symbols
@@ -345,18 +385,56 @@ wss.on('connection', ws => {
   ws.on('error', () => {}); // swallow socket errors; 'close' fires next
 });
 
+
 /**
  * Single shared tick listener — fan-out to all open clients subscribed to the symbol.
- * Hot path: no score computation, just forward the raw snapshot.
+ *
+ * For each connected client:
+ *   1. Send the raw 'tick' frame (price update for live cell patching).
+ *   2. Run computeChange against every watchlist item that client owns for this symbol.
+ *      If the score crosses into 'significant' OR an alertPrice is crossed, also send
+ *      a 'alert' frame so the browser can fire a Push Notification immediately —
+ *      no polling required, the server pushes the moment it detects the crossing.
  */
 feed.on('tick', snapshot => {
   const sym = snapshot.symbol;
 
-  for (const ws of wss.clients) {
-    if (ws.readyState !== ws.OPEN) continue;
-    if (!ws.subscribedSymbols || !ws.subscribedSymbols.has(sym)) continue;
+  for (const client of wss.clients) {
+    if (client.readyState !== client.OPEN) continue;
+    if (!client.subscribedSymbols || !client.subscribedSymbols.has(sym)) continue;
 
-    ws.send(JSON.stringify({ type: 'tick', data: snapshot }));
+    // 1. Always forward the raw price tick
+    client.send(JSON.stringify({ type: 'tick', data: snapshot }));
+
+    // 2. Check for crossings against this client's watchlist items for this symbol
+    if (!client.userId) continue;
+
+    const watchlist = db.getWatchlist(client.userId);
+    const item      = watchlist.find(i => i.symbol === sym);
+    if (!item) continue;
+
+    const lastSeen = db.getLastSeen(client.userId, sym);
+    if (!lastSeen) continue; // no baseline yet — skip crossing check
+
+    const result = computeChange(snapshot, lastSeen, item.alertPrice);
+
+    // Fire an alert frame when:
+    //   a) price just crossed the user's alert threshold, OR
+    //   b) the score jumped into 'significant' bucket (score >= 45)
+    const alertCrossed = result.reasons.some(r => r.startsWith('Crossed alert price'));
+    const isSig        = result.bucket === 'significant';
+
+    if (alertCrossed || isSig) {
+      client.send(JSON.stringify({
+        type:    'alert',
+        symbol:  sym,
+        price:   snapshot.price,
+        bucket:  result.bucket,
+        score:   result.score,
+        reasons: result.reasons,
+        pct:     result.pctMoveSinceLastSeen,
+      }));
+    }
   }
 });
 
