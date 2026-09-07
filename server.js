@@ -19,6 +19,7 @@
  *   Server → { type: 'tick', data: <snapshot> }  (only for subscribed symbols)
  */
 
+const path   = require('path');
 const http   = require('http');
 const crypto = require('crypto');
 const express = require('express');
@@ -30,14 +31,28 @@ const db                 = require('./lib/db');
 
 // ─── App & server setup ────────────────────────────────────────────────────────
 
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
 const app    = express();
 const server = http.createServer(app);
 
-// WebSocket server mounted at path /ws
-const wss = new WebSocketServer({ server, path: '/ws' });
+// WebSocket server mounted at path /ws (only when not running in serverless lambda)
+let wss = null;
+if (!isServerless) {
+  try {
+    wss = new WebSocketServer({ server, path: '/ws' });
+  } catch (err) {
+    console.warn('[ws] WebSocketServer init skipped or failed:', err.message);
+  }
+}
 
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Root route handler ensures index.html is served reliably across environments
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -381,40 +396,42 @@ if (process.env.NODE_ENV !== 'production') {
  * The feed 'tick' listener forwards snapshots only to clients that subscribed
  * to that symbol — score computation is intentionally NOT done on this path.
  */
-wss.on('connection', ws => {
-  ws.subscribedSymbols = new Set();
-  ws.userId = null;  // set when client sends its first subscribe message
+if (wss) {
+  wss.on('connection', ws => {
+    ws.subscribedSymbols = new Set();
+    ws.userId = null;  // set when client sends its first subscribe message
 
-  ws.on('message', raw => {
-    let msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return; // ignore malformed frames
-    }
-
-    if (msg && msg.type === 'subscribe' && Array.isArray(msg.symbols)) {
-      // Persist the userId so the tick fan-out can do per-user crossing checks
-      if (msg.userId && typeof msg.userId === 'string') {
-        ws.userId = msg.userId.trim();
+    ws.on('message', raw => {
+      let msg;
+      try {
+        msg = JSON.parse(raw);
+      } catch {
+        return; // ignore malformed frames
       }
 
-      // Replace subscription set with the new list
-      ws.subscribedSymbols = new Set(
-        msg.symbols
-          .filter(s => typeof s === 'string')
-          .map(s => s.trim().toUpperCase())
-      );
+      if (msg && msg.type === 'subscribe' && Array.isArray(msg.symbols)) {
+        // Persist the userId so the tick fan-out can do per-user crossing checks
+        if (msg.userId && typeof msg.userId === 'string') {
+          ws.userId = msg.userId.trim();
+        }
 
-      // Ensure market feed tracks all requested symbols
-      for (const sym of ws.subscribedSymbols) {
-        feed.ensureSymbol(sym);
+        // Replace subscription set with the new list
+        ws.subscribedSymbols = new Set(
+          msg.symbols
+            .filter(s => typeof s === 'string')
+            .map(s => s.trim().toUpperCase())
+        );
+
+        // Ensure market feed tracks all requested symbols
+        for (const sym of ws.subscribedSymbols) {
+          feed.ensureSymbol(sym);
+        }
       }
-    }
+    });
+
+    ws.on('error', () => {}); // swallow socket errors; 'close' fires next
   });
-
-  ws.on('error', () => {}); // swallow socket errors; 'close' fires next
-});
+}
 
 
 /**
@@ -428,6 +445,7 @@ wss.on('connection', ws => {
  *      no polling required, the server pushes the moment it detects the crossing.
  */
 feed.on('tick', snapshot => {
+  if (!wss || !wss.clients) return;
   const sym = snapshot.symbol;
 
   for (const client of wss.clients) {
@@ -477,8 +495,10 @@ feed.on('tick', snapshot => {
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 
-// Start market feed at 2-second tick interval
-feed.start(2000);
+// Start market feed at 2-second tick interval (only for persistent server processes)
+if (!isServerless) {
+  feed.start(2000);
+}
 
 const PORT = process.env.PORT || 3000;
 
