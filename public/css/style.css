@@ -883,3 +883,279 @@ button[disabled] { opacity: .35; cursor: not-allowed; }
 }
 
 .ov-step strong { color: var(--text); font-weight: 600; }
+
+/* ── User Authentication Header Pill & Buttons ────────────────────── */
+#user-auth-area {
+  display: flex;
+  align-items: center;
+}
+
+.auth-btn {
+  background: var(--surface-hi);
+  border: 1px solid var(--border-hi);
+  color: #f1f5f9;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: .3rem .75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.auth-btn:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+  color: #fff;
+}
+
+.user-pill {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: .2rem .5rem .2rem .35rem;
+  border-radius: 20px;
+  font-size: .75rem;
+}
+
+.user-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0b0e14;
+  font-weight: 700;
+  font-size: .7rem;
+}
+
+.user-email {
+  color: var(--text);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: .72rem;
+}
+
+.logout-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: .7rem;
+  cursor: pointer;
+  padding: 0 .2rem;
+  transition: color .15s;
+}
+
+.logout-btn:hover {
+  color: var(--neg);
+}
+
+/* ── Auth Modal ───────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+}
+
+.modal-card {
+  position: relative;
+  background: #111419;
+  border: 1px solid var(--border-hi);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 380px;
+  padding: 2rem;
+  animation: modalFadeIn .2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(.96) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .15s;
+}
+
+.modal-close:hover {
+  color: var(--text);
+}
+
+.modal-header h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: .35rem;
+}
+
+.modal-subtitle {
+  font-size: .75rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+  margin-bottom: 1.35rem;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: .5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.35rem;
+}
+
+.auth-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-size: .82rem;
+  font-weight: 600;
+  padding: .5rem 0.25rem .55rem;
+  cursor: pointer;
+  transition: all .15s ease;
+  margin-bottom: -1px;
+}
+
+.auth-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  color: var(--text);
+  margin-bottom: .35rem;
+  text-transform: uppercase;
+}
+
+.form-group input {
+  width: 100%;
+  padding: .55rem .75rem;
+  font-size: .85rem;
+}
+
+.auth-submit-btn {
+  width: 100%;
+  padding: .65rem;
+  font-size: .85rem;
+  font-weight: 600;
+  margin-top: .5rem;
+  cursor: pointer;
+}
+
+.auth-error-msg {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid var(--neg);
+  color: #fca5a5;
+  font-size: .75rem;
+  padding: .5rem .75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.auth-success-msg {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid var(--pos);
+  color: #86efac;
+  font-size: .75rem;
+  padding: .5rem .75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.auth-footer {
+  text-align: center;
+  font-size: .68rem;
+  color: var(--text-faint);
+  margin-top: 1.5rem;
+}
+
+/* ── Auth Config Drawer ───────────────────────────────────────────── */
+.auth-config-drawer {
+  margin-top: 1.25rem;
+  border-top: 1px dashed var(--border);
+  padding-top: .85rem;
+  font-size: .75rem;
+}
+
+.auth-config-drawer summary {
+  color: var(--text-dim);
+  cursor: pointer;
+  outline: none;
+  font-weight: 500;
+  user-select: none;
+  transition: color .15s;
+}
+
+.auth-config-drawer summary:hover {
+  color: var(--accent);
+}
+
+.config-inputs {
+  margin-top: .75rem;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.config-inputs label {
+  font-size: .68rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.config-inputs input {
+  font-size: .75rem;
+  padding: .4rem .6rem;
+  width: 100%;
+}
+
+.cfg-save-btn {
+  margin-top: .4rem;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: .35rem .6rem;
+  border-radius: 4px;
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.cfg-save-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+

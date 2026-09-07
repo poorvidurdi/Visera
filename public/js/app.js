@@ -36,9 +36,30 @@ let ddWatchlist = new Set(); // symbols already in the watchlist (excluded from 
 let ddActive = -1;        // index of keyboard-highlighted item (-1 = none)
 let ddOpen = false;
 
+// ── Supabase Configuration ────────────────────────────────────────────────
+// Configure your Supabase project credentials below, pass via window.ENV, or enter via the UI settings drawer
+const savedSupaUrl = localStorage.getItem('visera_supabase_url');
+const savedSupaKey = localStorage.getItem('visera_supabase_key');
+
+const SUPABASE_URL = (window.ENV && window.ENV.SUPABASE_URL) || savedSupaUrl || 'https://mxbvojdxkqbugbunidjh.supabase.co';
+const SUPABASE_ANON_KEY = (window.ENV && window.ENV.SUPABASE_ANON_KEY) || savedSupaKey || 'sb_publishable_ojvEGz8X-38nrlO66w9Kqg_Ijjy0BqG';
+
+let supabaseClient = null;
+if (window.supabase && typeof window.supabase.createClient === 'function' && !SUPABASE_URL.includes('YOUR_SUPABASE_PROJECT')) {
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (err) {
+    console.warn('[supabase] Client init deferred:', err.message);
+  }
+}
+
+let currentUser = null;
+let authMode = 'signin'; // 'signin' | 'signup'
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 
 (async function boot() {
+  await initAuth();
   userId = await initSession();
   if (!userId) return;
   await fetchAndRender();
@@ -297,6 +318,11 @@ function ddSetOpen(open) {
 // ── Session ────────────────────────────────────────────────────────────────
 
 async function initSession() {
+  // If user is authenticated with Supabase, use their permanent UUID
+  if (currentUser && currentUser.id) {
+    return currentUser.id;
+  }
+
   const stored = localStorage.getItem('visera_userId');
   try {
     const res = await api('/api/session', {
@@ -418,7 +444,7 @@ function syncDirectBinanceStreams(symbols) {
   // Close sockets no longer in watchlist
   for (const [sym, sock] of directSockets.entries()) {
     if (!activeSet.has(sym)) {
-      try { sock.close(); } catch (_) {}
+      try { sock.close(); } catch (_) { }
       directSockets.delete(sym);
     }
   }
@@ -444,7 +470,7 @@ function syncDirectBinanceStreams(symbols) {
               applyTick({ symbol: sym, price: price });
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       });
 
       bws.addEventListener('close', function () {
@@ -455,7 +481,7 @@ function syncDirectBinanceStreams(symbols) {
       });
 
       directSockets.set(sym, bws);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   if (directSockets.size > 0) {
@@ -543,7 +569,7 @@ function wsConnect() {
   });
 
   ws.addEventListener('error', function () {
-    try { ws.close(); } catch (_) {}
+    try { ws.close(); } catch (_) { }
   });
 }
 
@@ -945,3 +971,204 @@ function fmtTime() {
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// ── Supabase Authentication Handlers ───────────────────────────────────────
+
+/**
+ * Initialize current auth session and listen to user login/logout events.
+ */
+async function initAuth() {
+  if (!supabaseClient) {
+    updateUserUI(null);
+    return;
+  }
+
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUser = session && session.user ? session.user : null;
+    updateUserUI(currentUser);
+
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      const prevId = userId;
+      currentUser = session && session.user ? session.user : null;
+      updateUserUI(currentUser);
+
+      if (currentUser && currentUser.id !== prevId) {
+        userId = currentUser.id;
+        toast('Logged in as ' + currentUser.email);
+        await fetchAndRender();
+      } else if (!currentUser && prevId) {
+        userId = await initSession();
+        toast('Logged out — back to default watchlist');
+        await fetchAndRender();
+      }
+    });
+  } catch (err) {
+    console.warn('[auth] Error initializing session:', err.message);
+  }
+}
+
+/**
+ * Updates the user avatar and profile pill in the header.
+ */
+function updateUserUI(user) {
+  const btnAuth = document.getElementById('btn-open-auth');
+  const userPill = document.getElementById('user-pill');
+  const userInit = document.getElementById('user-avatar-initial');
+  const userEmail = document.getElementById('user-display-email');
+
+  if (!btnAuth || !userPill) return;
+
+  if (user && user.email) {
+    btnAuth.style.display = 'none';
+    userPill.style.display = 'inline-flex';
+    if (userInit) userInit.textContent = user.email.charAt(0).toUpperCase();
+    if (userEmail) userEmail.textContent = user.email;
+  } else {
+    btnAuth.style.display = 'inline-block';
+    userPill.style.display = 'none';
+  }
+}
+
+function openAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.style.display = 'flex';
+  setAuthFeedback('', '');
+  switchAuthMode('signin');
+
+  // Pre-fill config inputs if saved
+  const cfgUrl = document.getElementById('cfg-supabase-url');
+  const cfgKey = document.getElementById('cfg-supabase-key');
+  if (cfgUrl && !cfgUrl.value) cfgUrl.value = localStorage.getItem('visera_supabase_url') || '';
+  if (cfgKey && !cfgKey.value) cfgKey.value = localStorage.getItem('visera_supabase_key') || '';
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function handleModalOverlayClick(e) {
+  if (e.target && e.target.id === 'auth-modal') {
+    closeAuthModal();
+  }
+}
+
+function switchAuthMode(mode) {
+  authMode = mode;
+  const tabSignIn = document.getElementById('btn-tab-signin');
+  const tabSignUp = document.getElementById('btn-tab-signup');
+  const title = document.getElementById('auth-modal-title');
+  const subtitle = document.getElementById('auth-modal-subtitle');
+  const submitBtn = document.getElementById('btn-auth-submit');
+
+  if (tabSignIn && tabSignUp) {
+    tabSignIn.classList.toggle('active', mode === 'signin');
+    tabSignUp.classList.toggle('active', mode === 'signup');
+  }
+
+  if (mode === 'signin') {
+    if (title) title.innerHTML = 'Sign In to Vis<span class="dot">E</span>ra';
+    if (subtitle) subtitle.textContent = 'Save your private watchlist and sync anomaly alerts across devices.';
+    if (submitBtn) submitBtn.innerHTML = 'Sign In &rarr;';
+  } else {
+    if (title) title.innerHTML = 'Create Vis<span class="dot">E</span>ra Account';
+    if (subtitle) subtitle.textContent = 'Start tracking your personal financial anomalies with Supabase sync.';
+    if (submitBtn) submitBtn.innerHTML = 'Create Account &rarr;';
+  }
+
+  setAuthFeedback('', '');
+}
+
+function setAuthFeedback(error, success) {
+  const elErr = document.getElementById('auth-error');
+  const elSucc = document.getElementById('auth-success');
+
+  if (elErr) {
+    elErr.style.display = error ? 'block' : 'none';
+    elErr.textContent = error || '';
+  }
+  if (elSucc) {
+    elSucc.style.display = success ? 'block' : 'none';
+    elSucc.textContent = success || '';
+  }
+}
+
+async function handleAuthSubmit(e) {
+  e.preventDefault();
+  const email = (document.getElementById('auth-email').value || '').trim();
+  const password = (document.getElementById('auth-password').value || '').trim();
+  const submitBtn = document.getElementById('btn-auth-submit');
+
+  if (!email || !password) return;
+
+  if (!supabaseClient) {
+    setAuthFeedback('Supabase credentials not configured yet. Please configure SUPABASE_URL and SUPABASE_ANON_KEY.', '');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  setAuthFeedback('', '');
+
+  try {
+    if (authMode === 'signin') {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      closeAuthModal();
+    } else {
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data && data.user && data.session) {
+        closeAuthModal();
+      } else {
+        setAuthFeedback('', 'Account created! Please check your email to confirm registration or sign in.');
+      }
+    }
+  } catch (err) {
+    setAuthFeedback(err.message || 'Authentication error', '');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function handleSignOut() {
+  if (supabaseClient) {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (_) { }
+  }
+  currentUser = null;
+  updateUserUI(null);
+  userId = await initSession();
+  await fetchAndRender();
+  toast('Signed out');
+}
+
+/**
+ * Allows the user to enter their Supabase Project URL and Anon Key directly
+ * in the UI settings drawer without modifying source files.
+ */
+function saveCustomSupabaseConfig() {
+  const url = (document.getElementById('cfg-supabase-url').value || '').trim();
+  const key = (document.getElementById('cfg-supabase-key').value || '').trim();
+
+  if (!url || !key) {
+    setAuthFeedback('Please enter both Supabase URL and Anon Key.', '');
+    return;
+  }
+
+  try {
+    localStorage.setItem('visera_supabase_url', url);
+    localStorage.setItem('visera_supabase_key', key);
+    if (window.supabase && typeof window.supabase.createClient === 'function') {
+      supabaseClient = window.supabase.createClient(url, key);
+      initAuth();
+      setAuthFeedback('', 'Connected to Supabase! You can now Sign Up or Sign In.');
+      toast('Supabase credentials saved');
+    }
+  } catch (err) {
+    setAuthFeedback('Invalid Supabase configuration: ' + err.message, '');
+  }
+}
+
+
