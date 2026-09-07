@@ -46,7 +46,7 @@
       <button class="tab-btn active" id="tab-overview" onclick="switchPage('overview')">
         Overview
       </button>
-      <button class="tab-btn" id="tab-watchlist" onclick="switchPage('watchlist')">
+      <button class="tab-btn" id="tab-watchlist" onclick="onWatchlistTabClick()">
         Live Watchlist
       </button>
     </nav>
@@ -81,7 +81,7 @@
           baseline — surfacing only the signals that actually matter. Set a price
           alert, walk away, and get a browser notification the moment it fires.
         </p>
-        <button class="primary ov-cta" onclick="switchPage('watchlist')">
+        <button class="primary ov-cta" onclick="onWatchlistTabClick()">
           Open Watchlist &rarr;
         </button>
       </div>
@@ -265,6 +265,7 @@
         </div>
 
         <div id="auth-error" class="auth-error-msg" style="display:none;"></div>
+        <div id="auth-success" class="auth-success-msg" style="display:none;"></div>
         <button type="submit" id="btn-auth-submit" class="primary auth-submit-btn">
           Sign In &rarr;
         </button>

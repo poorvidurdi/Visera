@@ -848,8 +848,18 @@ function api(path, opts) {
  * Updates the active tab button and shows the correct page div.
  * @param {'overview'|'watchlist'} name
  */
-function switchPage(name) {
+/**
+ * Switch between 'overview' and 'watchlist' tab pages.
+ * Updates the active tab button and shows the correct page div.
+ * @param {'overview'|'watchlist'} name
+ * @param {boolean} [force=false]
+ */
+function switchPage(name, force) {
   var key = String(name || 'overview').toLowerCase();
+  if (key === 'watchlist' && !currentUser && !force) {
+    openAuthModal('Please sign in or create an account to access your personal watchlist.');
+    return;
+  }
   // Update tab buttons
   document.querySelectorAll('.tab-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.id === 'tab-' + key);
@@ -862,12 +872,21 @@ function switchPage(name) {
   try { localStorage.setItem('visera_page', key); } catch (_) { }
 }
 
-// Restore last-visited tab on page load
+/**
+ * Invoked when user clicks the Watchlist nav tab or Overview CTA button.
+ * Prompts user to sign in if not authenticated; otherwise navigates to watchlist.
+ */
+function onWatchlistTabClick() {
+  if (!currentUser) {
+    openAuthModal('Please sign in or create an account to access your personal watchlist.');
+    return;
+  }
+  switchPage('watchlist', true);
+}
+
+// Requirement: Overview page is always the default opening page
 (function () {
-  try {
-    var saved = (localStorage.getItem('visera_page') || '').toLowerCase();
-    if (saved === 'watchlist' || saved === 'overview') switchPage(saved);
-  } catch (_) { }
+  switchPage('overview', true);
 })();
 
 /**
@@ -993,14 +1012,18 @@ async function initAuth() {
       currentUser = session && session.user ? session.user : null;
       updateUserUI(currentUser);
 
-      if (currentUser && currentUser.id !== prevId) {
+      if (event === 'SIGNED_IN' || (currentUser && currentUser.id !== prevId)) {
         userId = currentUser.id;
         toast('Logged in as ' + currentUser.email);
         await fetchAndRender();
-      } else if (!currentUser && prevId) {
+        // Redirect directly to the user's specific watchlist upon login
+        switchPage('watchlist', true);
+      } else if (event === 'SIGNED_OUT' || (!currentUser && prevId)) {
         userId = await initSession();
-        toast('Logged out — back to default watchlist');
+        toast('Signed out');
         await fetchAndRender();
+        // Redirect back to overview on logout
+        switchPage('overview', true);
       }
     });
   } catch (err) {
@@ -1030,10 +1053,10 @@ function updateUserUI(user) {
   }
 }
 
-function openAuthModal() {
+function openAuthModal(notice) {
   const modal = document.getElementById('auth-modal');
   if (modal) modal.style.display = 'flex';
-  setAuthFeedback('', '');
+  setAuthFeedback('', notice || '');
   switchAuthMode('signin');
 
   // Pre-fill config inputs if saved
@@ -1115,17 +1138,28 @@ async function handleAuthSubmit(e) {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
       closeAuthModal();
+      switchPage('watchlist', true);
     } else {
       const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if (error) throw error;
-      if (data && data.user && data.session) {
+      if (data && data.session) {
         closeAuthModal();
+        switchPage('watchlist', true);
       } else {
-        setAuthFeedback('', 'Account created! Please check your email to confirm registration or sign in.');
+        setAuthFeedback('', 'Account created! If email confirmation is enabled, please verify your email or log in.');
       }
     }
   } catch (err) {
-    setAuthFeedback(err.message || 'Authentication error', '');
+    let msg = err.message || 'Authentication error';
+    const lower = msg.toLowerCase();
+    if (lower.includes('rate limit')) {
+      msg = 'Email rate limit reached by Supabase. Tip: Turn off "Confirm email" in Supabase Dashboard -> Auth -> Providers -> Email for instant logins.';
+    } else if (lower.includes('email not confirmed')) {
+      msg = 'Email not confirmed yet. Check your inbox/spam or turn off "Confirm email" in Supabase Auth settings.';
+    } else if (lower.includes('invalid login credentials')) {
+      msg = 'Invalid email or password. Please verify your credentials or create an account.';
+    }
+    setAuthFeedback(msg, '');
   } finally {
     submitBtn.disabled = false;
   }
@@ -1141,6 +1175,7 @@ async function handleSignOut() {
   updateUserUI(null);
   userId = await initSession();
   await fetchAndRender();
+  switchPage('overview', true);
   toast('Signed out');
 }
 
