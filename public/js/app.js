@@ -388,13 +388,14 @@ function wsSend(msg) {
 
 /**
  * Update the #ws-status pill in the header.
- * @param {'live'|'reconnecting'} state
+ * @param {'live'|'reconnecting'|'polling'} state
  * @param {string} label
  */
 function wsSetStatus(state, label) {
   var el = document.getElementById('ws-status');
   var tx = document.getElementById('ws-status-text');
-  el.className = state === 'live' ? 'ws-live' : 'ws-reconnecting';
+  if (!el || !tx) return;
+  el.className = state === 'live' ? 'ws-live' : (state === 'polling' ? 'ws-polling' : 'ws-reconnecting');
   tx.textContent = label;
 }
 
@@ -448,38 +449,67 @@ function syncDirectBinanceStreams(symbols) {
 
       bws.addEventListener('close', function () {
         directSockets.delete(sym);
+        if (directSockets.size === 0 && (!ws || ws.readyState !== WebSocket.OPEN)) {
+          wsSetStatus('polling', 'cloud feed');
+        }
       });
 
       directSockets.set(sym, bws);
     } catch (_) {}
   }
+
+  if (directSockets.size > 0) {
+    wsSetStatus('live', 'live (streaming)');
+  }
 }
+
+let wsFailCount = 0;
 
 /**
  * Open the WebSocket and wire up all handlers.
- * Calling this again while a socket is already open is a no-op (guarded by
- * readyState check) so it is safe to call from reconnect paths.
+ * In serverless environments (like Vercel), the backend socket /ws is not available.
+ * If connecting fails twice, it gracefully falls back to 'cloud feed' status
+ * and avoids spamming reconnect warnings since HTTP polling is active.
  */
 function wsConnect() {
   // Sync client-side live streaming sockets for USDT symbols
   syncDirectBinanceStreams(wsWatchedSyms);
 
+  // If on a serverless host with direct streams active, we are already live
+  if (directSockets.size > 0) {
+    wsSetStatus('live', 'live (streaming)');
+  }
+
   // Prevent double-connect if called while a socket is already alive
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
   clearTimeout(wsReconnTimer);
+
+  // If server WebSocket failed repeatedly (e.g. serverless host), don't show orange warning
+  if (wsFailCount >= 2) {
+    if (directSockets.size > 0) {
+      wsSetStatus('live', 'live (streaming)');
+    } else {
+      wsSetStatus('polling', 'cloud feed');
+    }
+    // Poll again later in case user switches environment
+    wsReconnTimer = setTimeout(wsConnect, 15000);
+    return;
+  }
+
   wsSetStatus('reconnecting', 'connecting…');
 
   try {
     ws = new WebSocket(wsUrl());
   } catch (_) {
     ws = null;
+    wsFailCount++;
     return;
   }
 
   ws.addEventListener('open', function () {
+    wsFailCount = 0;
     wsSetStatus('live', 'live');
-    // Send current symbol list immediately on (re)connect; include userId for server-side crossing checks
     wsSend({ type: 'subscribe', symbols: wsWatchedSyms, userId: userId });
   });
 
@@ -488,7 +518,6 @@ function wsConnect() {
     try { msg = JSON.parse(event.data); } catch { return; }
 
     if (msg && msg.type === 'tick' && msg.data) {
-      // Guard: skip DOM patch if render() is currently replacing innerHTML
       if (!isRendering) applyTick(msg.data);
     }
 
@@ -498,19 +527,23 @@ function wsConnect() {
   });
 
   ws.addEventListener('close', function () {
-    // If we have direct Binance streams open, keep status active
+    ws = null;
+    wsFailCount++;
+
     if (directSockets.size > 0) {
       wsSetStatus('live', 'live (streaming)');
+    } else if (wsFailCount >= 2) {
+      wsSetStatus('polling', 'cloud feed');
     } else {
-      wsSetStatus('reconnecting', 'reconnecting…');
+      wsSetStatus('reconnecting', 'connecting…');
     }
-    ws = null;
-    // Auto-reconnect with fixed backoff
-    wsReconnTimer = setTimeout(wsConnect, WS_RECONNECT_MS);
+
+    const backoff = wsFailCount >= 2 ? 15000 : WS_RECONNECT_MS;
+    wsReconnTimer = setTimeout(wsConnect, backoff);
   });
 
   ws.addEventListener('error', function () {
-    // 'close' fires right after 'error'
+    try { ws.close(); } catch (_) {}
   });
 }
 

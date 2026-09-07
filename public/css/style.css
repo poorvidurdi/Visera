@@ -136,6 +136,9 @@ h1 span.dot { color: var(--accent); }
 #ws-status.ws-live         { color: var(--pos); border-color: #166534; }
 #ws-status.ws-live .ws-dot { background: var(--pos); animation: blink 2s ease-in-out infinite; }
 
+#ws-status.ws-polling         { color: var(--accent); border-color: var(--accent-dim); }
+#ws-status.ws-polling .ws-dot { background: var(--accent); }
+
 #ws-status.ws-reconnecting         { color: var(--notable); border-color: #78350f; }
 #ws-status.ws-reconnecting .ws-dot { background: var(--notable); }
 
