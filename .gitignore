@@ -1,25 +1,48 @@
 # Dependencies
-node_modules/*
-
-# Lockfile (committed separately if desired; exclude here for flexibility)
+node_modules/
 package-lock.json
 
-# Runtime data store
+# Runtime local data & persistence files
 data.json
+data.json.*
+*.local.json
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
 
 # Logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# OS noise
+# Operating System noise
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Editor / IDE
+# Editor & IDE artifacts
 .vscode/
 .idea/
+*.sublime-project
+*.sublime-workspace
 *.swp
 *.swo
+*~
 
-#tests
+# Temporary & build caches
+tmp/
+temp/
+scratch/
+*.tmp
+*.bak
+.nyc_output/
+coverage/
+
+# Tests
+test/
 test

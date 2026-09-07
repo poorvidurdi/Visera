@@ -148,6 +148,12 @@ app.get('/api/changes/:userId', (req, res) => {
   const { userId } = req.params;
   const watchlist  = db.getWatchlist(userId);
 
+  // Compute market benchmark (SPY) move for macro vs idiosyncratic signal decomposition
+  const benchSnap = feed.getSnapshot('SPY');
+  const benchmarkPct = benchSnap && benchSnap.prevClose
+    ? ((benchSnap.price - benchSnap.prevClose) / benchSnap.prevClose) * 100
+    : 0;
+
   const changes = watchlist.map(item => {
     const sym      = item.symbol;
     const snapshot = feed.getSnapshot(sym);
@@ -161,7 +167,8 @@ app.get('/api/changes/:userId', (req, res) => {
     const result = computeChange(
       snapshot || { price: NaN },
       lastSeen,
-      item.alertPrice
+      item.alertPrice,
+      benchmarkPct
     );
 
     return {
@@ -173,7 +180,8 @@ app.get('/api/changes/:userId', (req, res) => {
       score:                result.score,
       bucket:               result.bucket,
       reasons:              result.reasons,
-      pctMoveSinceLastSeen: result.pctMoveSinceLastSeen
+      pctMoveSinceLastSeen: result.pctMoveSinceLastSeen,
+      signalClassification: result.signalClassification
     };
   });
 
@@ -184,7 +192,15 @@ app.get('/api/changes/:userId', (req, res) => {
     return b.score - a.score;
   });
 
-  res.json({ userId, changes });
+  res.json({
+    userId,
+    benchmark: {
+      symbol: 'SPY',
+      price: benchSnap ? benchSnap.price : 545.00,
+      pctMove: Math.round(benchmarkPct * 100) / 100
+    },
+    changes
+  });
 });
 
 /**
@@ -244,6 +260,7 @@ const SYMBOL_NAMES = {
   RELIANCE: 'Reliance Industries Ltd.',
   TCS:      'Tata Consultancy Services',
   INFY:     'Infosys Ltd.',
+  SPY:      'SPDR S&P 500 ETF (Market Benchmark)',
 };
 
 app.get('/api/symbols', (req, res) => {
@@ -416,7 +433,12 @@ feed.on('tick', snapshot => {
     const lastSeen = db.getLastSeen(client.userId, sym);
     if (!lastSeen) continue; // no baseline yet — skip crossing check
 
-    const result = computeChange(snapshot, lastSeen, item.alertPrice);
+    const benchSnap = feed.getSnapshot('SPY');
+    const benchmarkPct = benchSnap && benchSnap.prevClose
+      ? ((benchSnap.price - benchSnap.prevClose) / benchSnap.prevClose) * 100
+      : 0;
+
+    const result = computeChange(snapshot, lastSeen, item.alertPrice, benchmarkPct);
 
     // Fire an alert frame when:
     //   a) price just crossed the user's alert threshold, OR
@@ -426,13 +448,14 @@ feed.on('tick', snapshot => {
 
     if (alertCrossed || isSig) {
       client.send(JSON.stringify({
-        type:    'alert',
-        symbol:  sym,
-        price:   snapshot.price,
-        bucket:  result.bucket,
-        score:   result.score,
-        reasons: result.reasons,
-        pct:     result.pctMoveSinceLastSeen,
+        type:                 'alert',
+        symbol:               sym,
+        price:                snapshot.price,
+        bucket:               result.bucket,
+        score:                result.score,
+        reasons:              result.reasons,
+        pct:                  result.pctMoveSinceLastSeen,
+        signalClassification: result.signalClassification,
       }));
     }
   }
