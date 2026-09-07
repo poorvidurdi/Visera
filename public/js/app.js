@@ -852,7 +852,7 @@ function alertToast(sym, price, pct, reason, bucket) {
 
   card.innerHTML =
     '<div class="alert-card-head">' +
-    '<span class="alert-card-sym">⚡ ' + esc(sym) + '</span>' +
+    '<span class="alert-card-sym">' + esc(sym) + '</span>' +
     '<span class="alert-card-price">' + esc(price) + '</span>' +
     '<span class="alert-card-pct">' + esc(pct) + '</span>' +
     '</div>' +
