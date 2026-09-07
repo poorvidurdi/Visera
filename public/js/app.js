@@ -570,13 +570,24 @@ function applyTick(snap) {
     priceCell.textContent = fmtPrice(Number(snap.price));
   }
 
-  // Only update the pct cell if the server sends pctMove on the tick
-  if (pctCell && snap.pctMove != null && !isNaN(Number(snap.pctMove))) {
-    var pct = Number(snap.pctMove);
-    var pctCls = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
-    var pctArrow = pct > 0.001 ? '▲' : pct < -0.001 ? '▼' : '';
-    pctCell.className = 'cell cell-pct ' + pctCls;
-    pctCell.textContent = pctArrow + fmtPct(pct);
+  // Update the pct cell: either from server pctMove, or compute live against row's baseline
+  if (pctCell && snap.price != null && !isNaN(Number(snap.price))) {
+    var pct = null;
+    if (snap.pctMove != null && !isNaN(Number(snap.pctMove))) {
+      pct = Number(snap.pctMove);
+    } else if (row.dataset.baseline) {
+      var base = parseFloat(row.dataset.baseline);
+      if (!isNaN(base) && base > 0) {
+        pct = ((Number(snap.price) - base) / base) * 100;
+      }
+    }
+
+    if (pct != null && !isNaN(pct)) {
+      var pctCls = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
+      var pctArrow = pct > 0.001 ? '▲' : pct < -0.001 ? '▼' : '';
+      pctCell.className = 'cell cell-pct ' + pctCls;
+      pctCell.textContent = pctArrow + fmtPct(pct);
+    }
   }
 
   // Briefly highlight the row so the user can see what changed
@@ -681,8 +692,12 @@ function buildRow(item, bucket) {
 
   var alertVal = alert !== '' ? alert : '';
 
+  var baselinePrice = (item.lastSeen && item.lastSeen.price != null)
+    ? Number(item.lastSeen.price)
+    : (snap && snap.prevClose != null ? Number(snap.prevClose) : price);
+
   return (
-    '<li class="sym-row ' + m.cls + '" data-symbol="' + esc(sym) + '">' +
+    '<li class="sym-row ' + m.cls + '" data-symbol="' + esc(sym) + '" data-baseline="' + (isNaN(baselinePrice) ? '' : baselinePrice) + '">' +
     '<div class="row-main">' +
     '<div class="cell cell-sym">' + esc(sym) + '</div>' +
     '<div class="cell cell-price">' + priceStr + '</div>' +

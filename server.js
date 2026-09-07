@@ -163,18 +163,29 @@ app.get('/api/changes/:userId', async (req, res) => {
   const { userId } = req.params;
   const watchlist  = db.getWatchlist(userId);
 
-  // In serverless/cold-start environments, ensure all USDT symbols have initialized their snapshot
+  // In serverless environments, advance simulated prices and ensure fresh prices for crypto pairs
   for (const item of watchlist) {
-    if (item.symbol && item.symbol.toUpperCase().endsWith('USDT')) {
-      const snap = feed.getSnapshot(item.symbol);
-      if (!snap || snap.price === 0) {
-        feed.ensureSymbol(item.symbol);
-        const bState = feed.binanceAdapter && feed.binanceAdapter.states.get(item.symbol.toUpperCase());
+    const sym = (item.symbol || '').toUpperCase();
+    if (sym.endsWith('USDT')) {
+      const snap = feed.getSnapshot(sym);
+      if (!snap || snap.price === 0 || isServerless) {
+        feed.ensureSymbol(sym);
+        const bState = feed.binanceAdapter && feed.binanceAdapter.states.get(sym);
         if (bState && bState.initPromise) {
           try { await Promise.race([bState.initPromise, new Promise(r => setTimeout(r, 1200))]); } catch (_) {}
         }
       }
+    } else {
+      // In serverless, since continuous feed.start() timer is disabled, advance quote on poll
+      if (isServerless) {
+        try { await feed.simulatedAdapter.fetchQuote(sym); } catch (_) {}
+      }
     }
+  }
+
+  // Also advance SPY benchmark if serverless
+  if (isServerless) {
+    try { await feed.simulatedAdapter.fetchQuote('SPY'); } catch (_) {}
   }
 
   // Compute market benchmark (SPY) move for macro vs idiosyncratic signal decomposition
