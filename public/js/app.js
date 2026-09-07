@@ -1003,6 +1003,16 @@ async function initAuth() {
   }
 
   try {
+    // Check for auth callback errors in the URL hash (e.g. #error=access_denied&error_description=...)
+    if (window.location.hash && window.location.hash.includes('error=')) {
+      try {
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        const desc = params.get('error_description') || params.get('error') || 'Authentication link error';
+        openAuthModal(desc.replace(/\+/g, ' '));
+        window.history.replaceState(null, null, window.location.pathname);
+      } catch (_) { }
+    }
+
     const { data: { session } } = await supabaseClient.auth.getSession();
     currentUser = session && session.user ? session.user : null;
     updateUserUI(currentUser);
@@ -1140,7 +1150,12 @@ async function handleAuthSubmit(e) {
       closeAuthModal();
       switchPage('watchlist', true);
     } else {
-      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      const redirectUrl = window.location.origin;
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectUrl }
+      });
       if (error) throw error;
       if (data && data.session) {
         closeAuthModal();
