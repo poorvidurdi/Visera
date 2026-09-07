@@ -509,4 +509,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, server, wss };
+app.server = server;
+app.wss = wss;
+
+module.exports = app;
