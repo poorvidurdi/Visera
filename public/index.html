@@ -1,246 +1,234 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visera · Market Signal Monitor &amp; Anomaly Watchlist</title>
+  <title>VisEra · Market Signal Monitor &amp; Anomaly Watchlist</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
+
 <body>
 
-<div id="app">
+  <div id="app">
 
-  <!-- ── Persistent top header ─────────────────────────────────────── -->
-  <header>
-    <div class="header-left">
-      <h1>VISE<span class="dot">R</span>A</h1>
-      <div class="tagline">market signal monitor &middot; anomaly watchlist</div>
-    </div>
-    <div class="header-right">
-      <div id="ws-status" title="WebSocket live-tick connection">
-        <span class="ws-dot"></span>
-        <span id="ws-status-text">connecting</span>
+    <!-- ── Persistent top header ─────────────────────────────────────── -->
+    <header>
+      <div class="header-left">
+        <h1>Vis<span class="dot">E</span>ra</h1>
+        <div class="tagline">market signal monitor &middot; anomaly watchlist</div>
       </div>
-      <div id="status-bar">
-        <span class="pulse" id="pulse"></span>
-        <span id="status-text">connecting&hellip;</span>
+      <div class="header-right">
+        <div id="ws-status" title="WebSocket live-tick connection">
+          <span class="ws-dot"></span>
+          <span id="ws-status-text">connecting</span>
+        </div>
+        <div id="status-bar">
+          <span class="pulse" id="pulse"></span>
+          <span id="status-text">connecting&hellip;</span>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- ── Tab navigation ───────────────────────────────────────────── -->
-  <nav id="tab-nav">
-    <button class="tab-btn active" id="tab-overview" onclick="switchPage('overview')">
-      <span class="tab-icon">🏠</span> Overview
-    </button>
-    <button class="tab-btn" id="tab-watchlist" onclick="switchPage('watchlist')">
-      <span class="tab-icon">💬</span> Live Watchlist
-    </button>
-  </nav>
-
-  <!-- ════════════════════════════════════════════════════════════════ -->
-  <!-- PAGE 1 — Overview                                               -->
-  <!-- ════════════════════════════════════════════════════════════════ -->
-  <div id="page-overview" class="page active">
-
-    <!-- Stats bar -->
-    <div id="ov-stats">
-      <div class="ov-stat">
-        <div class="ov-stat-value" id="ov-stat-symbols">—</div>
-        <div class="ov-stat-label">Symbols tracked</div>
-      </div>
-      <div class="ov-stat">
-        <div class="ov-stat-value" id="ov-stat-sig">—</div>
-        <div class="ov-stat-label">Significant signals</div>
-      </div>
-      <div class="ov-stat">
-        <div class="ov-stat-value" id="ov-stat-alerts">—</div>
-        <div class="ov-stat-label">Alert prices set</div>
-      </div>
-    </div>
-
-    <!-- Hero banner -->
-    <div id="ov-hero">
-      <div class="ov-hero-kicker">Real-Time Anomaly Detection</div>
-      <h2 class="ov-hero-title">Watch Smarter,<br>Not Harder</h2>
-      <p class="ov-hero-desc">
-        Visera scores every price tick against <em>your</em> personal last-seen
-        baseline — surfacing only the signals that actually matter. Set a price
-        alert, walk away, and get a browser notification the moment it fires.
-      </p>
-      <button class="primary ov-cta" onclick="switchPage('watchlist')">
-        Open Watchlist &rarr;
+    <!-- ── Tab navigation ───────────────────────────────────────────── -->
+    <nav id="tab-nav">
+      <button class="tab-btn active" id="tab-overview" onclick="switchPage('overview')">
+        Overview
       </button>
-    </div>
-
-    <!-- Feature cards -->
-    <div id="ov-features">
-      <div class="ov-card" style="border-color: rgba(168, 85, 247, 0.4);">
-        <div class="ov-card-icon" style="color:#c084fc">⚖️</div>
-        <div class="ov-card-title">Idiosyncratic vs. Macro Decomposition</div>
-        <div class="ov-card-desc">
-          Distinguishes true asset-specific alpha from broad market noise: surfaces
-          <strong style="color:#d8b4fe">Idiosyncratic moves</strong> (stock-specific shocks)
-          vs. <strong style="color:#93c5fd">Macro-driven moves</strong> (e.g. "AAPL -3%, but so was the S&amp;P 500 — nothing stock-specific here").
-        </div>
-      </div>
-      <div class="ov-card">
-        <div class="ov-card-icon" style="color:var(--accent)">⚡</div>
-        <div class="ov-card-title">Anomaly Scoring Engine</div>
-        <div class="ov-card-desc">
-          Every tick is scored across four signals — volatility-normalised move,
-          volume anomaly, 52-week high/low crossing, and user alert crossing.
-          Score ≥&nbsp;45 promotes a symbol to <span style="color:var(--sig)">Significant</span>.
-        </div>
-      </div>
-      <div class="ov-card">
-        <div class="ov-card-icon" style="color:var(--pos)">◎</div>
-        <div class="ov-card-title">Surgical Live Updates</div>
-        <div class="ov-card-desc">
-          WebSocket ticks arrive every 2 s and patch only the price cells that
-          changed — no full re-renders, no flicker. HTTP polling runs every 5 s
-          as a silent fallback with automatic reconnect.
-        </div>
-      </div>
-      <div class="ov-card">
-        <div class="ov-card-icon" style="color:var(--notable)">🔔</div>
-        <div class="ov-card-title">Push Notifications</div>
-        <div class="ov-card-desc">
-          Crossing detection runs server-side on every tick. When your alert fires,
-          an OS-level browser notification is pushed instantly — even when Visera
-          is in the background or minimised.
-        </div>
-      </div>
-      <div class="ov-card">
-        <div class="ov-card-icon" style="color:#a78bfa">◐</div>
-        <div class="ov-card-title">Personal Baseline</div>
-        <div class="ov-card-desc">
-          % moves and scores are relative to <em>when you last looked</em>, not
-          an arbitrary open price. Mark a row seen and that price becomes your
-          new reference point.
-        </div>
-      </div>
-      <div class="ov-card">
-        <div class="ov-card-icon" style="color:var(--pos)">💾</div>
-        <div class="ov-card-title">Persistent Watchlist</div>
-        <div class="ov-card-desc">
-          Every watchlist change, alert price, and last-seen record is written
-          to disk atomically on every mutation. Your data survives server
-          restarts without a database.
-        </div>
-      </div>
-      <div class="ov-card">
-        <div class="ov-card-icon" style="color:var(--accent)">⌕</div>
-        <div class="ov-card-title">Smart Ticker Search</div>
-        <div class="ov-card-desc">
-          Type a ticker symbol <em>or</em> company name to instantly filter the
-          dropdown. Already-added symbols are excluded automatically so you
-          can't create duplicates.
-        </div>
-      </div>
-    </div>
-
-    <!-- How-to steps -->
-    <div id="ov-howto">
-      <div class="ov-howto-title">How to use Visera</div>
-      <div class="ov-steps">
-        <div class="ov-step">
-          <div class="ov-step-num">1</div>
-          <div><strong>Add a ticker</strong> — go to the Watchlist tab, type a symbol
-          or company name in the search box and press <em>+ Add</em>.</div>
-        </div>
-        <div class="ov-step">
-          <div class="ov-step-num">2</div>
-          <div><strong>Set an alert price</strong> — enter a target price in the
-          alert field on any row. You'll be notified the moment it crosses.</div>
-        </div>
-        <div class="ov-step">
-          <div class="ov-step-num">3</div>
-          <div><strong>Allow notifications</strong> — accept the browser permission
-          prompt so Visera can alert you even when backgrounded.</div>
-        </div>
-        <div class="ov-step">
-          <div class="ov-step-num">4</div>
-          <div><strong>Mark seen</strong> — click <em>✓ seen</em> on a row to set
-          your baseline. All future moves are relative to that price.</div>
-        </div>
-        <div class="ov-step">
-          <div class="ov-step-num">5</div>
-          <div><strong>Read the buckets</strong> —
-          <span style="color:var(--sig)">Significant</span> and
-          <span style="color:var(--notable)">Notable</span> need your attention;
-          <span style="color:var(--text-faint)">Quiet</span> can wait.</div>
-        </div>
-      </div>
-    </div>
-
-  </div><!-- /page-overview -->
-
-  <!-- ════════════════════════════════════════════════════════════════ -->
-  <!-- PAGE 2 — Live Watchlist                                         -->
-  <!-- ════════════════════════════════════════════════════════════════ -->
-  <div id="page-watchlist" class="page">
-
-    <!-- Top banner matching Screenshot 2 -->
-    <div class="page-banner">
-      <div class="page-banner-title">
-        <span class="banner-icon">💬</span> Real-Time Anomaly Watchlist
-      </div>
-      <div class="page-banner-desc">
-        Continuous signal scoring, volatility-normalized movements, and automated price-alert detection.
-      </div>
-    </div>
-
-    <div id="controls">
-      <form id="add-form" onsubmit="handleAddSymbol(event)">
-        <div class="ticker-combo">
-          <input
-            id="inp-symbol"
-            type="text"
-            placeholder="TICKER or company…"
-            autocomplete="off"
-            spellcheck="false"
-            maxlength="20"
-            required
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded="false"
-            aria-controls="ticker-dropdown"
-          />
-          <button type="button" class="ticker-chevron" id="ticker-chevron-btn"
-                  tabindex="-1" aria-label="Toggle ticker list">&#9660;</button>
-          <div id="ticker-dropdown" role="listbox"></div>
-        </div>
-        <input id="inp-alert" type="number" placeholder="alert $" step="0.01" min="0" />
-        <button type="submit" class="primary" id="btn-add">+ Add</button>
-      </form>
-      <button class="mark-all" id="btn-mark-all" onclick="handleMarkAll()">
-        &#10003; Mark all seen
+      <button class="tab-btn" id="tab-watchlist" onclick="switchPage('watchlist')">
+        Live Watchlist
       </button>
-    </div>
+    </nav>
 
-    <!-- Watchlist Column Headers -->
-    <div class="watchlist-thead" aria-hidden="true">
-      <div class="th-cell th-sym">Ticker</div>
-      <div class="th-cell th-price">Live Price</div>
-      <div class="th-cell th-pct">% Move</div>
-      <div class="th-cell th-reasons">Signal Reasoning</div>
-      <div class="th-cell th-alert">Alert Target</div>
-      <div class="th-cell th-actions">Actions</div>
-    </div>
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <!-- PAGE 1 — Overview                                               -->
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <div id="page-overview" class="page active">
 
-    <div id="feed">
-      <div class="empty-state">Loading&hellip;</div>
-    </div>
+      <!-- Stats bar -->
+      <div id="ov-stats">
+        <div class="ov-stat">
+          <div class="ov-stat-value" id="ov-stat-symbols">—</div>
+          <div class="ov-stat-label">Symbols tracked</div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-value" id="ov-stat-sig">—</div>
+          <div class="ov-stat-label">Significant signals</div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-value" id="ov-stat-alerts">—</div>
+          <div class="ov-stat-label">Alert prices set</div>
+        </div>
+      </div>
 
-  </div><!-- /page-watchlist -->
+      <!-- Hero banner -->
+      <div id="ov-hero">
+        <div class="ov-hero-kicker">Real-Time Anomaly Detection</div>
+        <h2 class="ov-hero-title">Watch Smarter,<br>Not Harder</h2>
+        <p class="ov-hero-desc">
+          Visera scores every price tick against <em>your</em> personal last-seen
+          baseline — surfacing only the signals that actually matter. Set a price
+          alert, walk away, and get a browser notification the moment it fires.
+        </p>
+        <button class="primary ov-cta" onclick="switchPage('watchlist')">
+          Open Watchlist &rarr;
+        </button>
+      </div>
 
-</div><!-- /app -->
+      <!-- Feature cards -->
+      <div id="ov-features">
+        <div class="ov-card" style="border-color: rgba(168, 85, 247, 0.4);">
+          <div class="ov-card-title">Idiosyncratic vs. Macro Decomposition</div>
+          <div class="ov-card-desc">
+            Distinguishes true asset-specific alpha from broad market noise: surfaces
+            <strong style="color:#d8b4fe">Idiosyncratic moves</strong> (stock-specific shocks)
+            vs. <strong style="color:#93c5fd">Macro-driven moves</strong> (e.g. "AAPL -3%, but so was the S&amp;P 500 —
+            nothing stock-specific here").
+          </div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-card-title">Anomaly Scoring Engine</div>
+          <div class="ov-card-desc">
+            Every tick is scored across four signals — volatility-normalised move,
+            volume anomaly, 52-week high/low crossing, and user alert crossing.
+            Score ≥&nbsp;45 promotes a symbol to <span style="color:var(--sig)">Significant</span>.
+          </div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-card-title">Surgical Live Updates</div>
+          <div class="ov-card-desc">
+            WebSocket ticks arrive every 2 s and patch only the price cells that
+            changed — no full re-renders, no flicker. HTTP polling runs every 5 s
+            as a silent fallback with automatic reconnect.
+          </div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-card-title">Push Notifications</div>
+          <div class="ov-card-desc">
+            Crossing detection runs server-side on every tick. When your alert fires,
+            an OS-level browser notification is pushed instantly — even when Visera
+            is in the background or minimised.
+          </div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-card-title">Personal Baseline</div>
+          <div class="ov-card-desc">
+            % moves and scores are relative to <em>when you last looked</em>, not
+            an arbitrary open price. Mark a row seen and that price becomes your
+            new reference point.
+          </div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-card-title">Persistent Watchlist</div>
+          <div class="ov-card-desc">
+            Every watchlist change, alert price, and last-seen record is written
+            to disk atomically on every mutation. Your data survives server
+            restarts without a database.
+          </div>
+        </div>
+        <div class="ov-card">
+          <div class="ov-card-title">Smart Ticker Search</div>
+          <div class="ov-card-desc">
+            Type a ticker symbol <em>or</em> company name to instantly filter the
+            dropdown. Already-added symbols are excluded automatically so you
+            can't create duplicates.
+          </div>
+        </div>
+      </div>
 
-<div id="toast"></div>
-<div id="alert-stack"></div>
+      <!-- How-to steps -->
+      <div id="ov-howto">
+        <div class="ov-howto-title">How to use Visera</div>
+        <div class="ov-steps">
+          <div class="ov-step">
+            <div class="ov-step-num">1</div>
+            <div><strong>Add a ticker</strong> — go to the Watchlist tab, type a symbol
+              or company name in the search box and press <em>+ Add</em>.</div>
+          </div>
+          <div class="ov-step">
+            <div class="ov-step-num">2</div>
+            <div><strong>Set an alert price</strong> — enter a target price in the
+              alert field on any row. You'll be notified the moment it crosses.</div>
+          </div>
+          <div class="ov-step">
+            <div class="ov-step-num">3</div>
+            <div><strong>Allow notifications</strong> — accept the browser permission
+              prompt so Visera can alert you even when backgrounded.</div>
+          </div>
+          <div class="ov-step">
+            <div class="ov-step-num">4</div>
+            <div><strong>Mark seen</strong> — click <em>✓ seen</em> on a row to set
+              your baseline. All future moves are relative to that price.</div>
+          </div>
+          <div class="ov-step">
+            <div class="ov-step-num">5</div>
+            <div><strong>Read the buckets</strong> —
+              <span style="color:var(--sig)">Significant</span> and
+              <span style="color:var(--notable)">Notable</span> need your attention;
+              <span style="color:var(--text-faint)">Quiet</span> can wait.
+            </div>
+          </div>
+        </div>
+      </div>
 
-<!-- Separated Application Logic -->
-<script src="/js/app.js"></script>
+    </div><!-- /page-overview -->
+
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <!-- PAGE 2 — Live Watchlist                                         -->
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <div id="page-watchlist" class="page">
+
+      <!-- Top banner matching Screenshot 2 -->
+      <div class="page-banner">
+        <div class="page-banner-title">
+          Real-Time Anomaly Watchlist
+        </div>
+        <div class="page-banner-desc">
+          Continuous signal scoring, volatility-normalized movements, and automated price-alert detection.
+        </div>
+      </div>
+
+      <div id="controls">
+        <form id="add-form" onsubmit="handleAddSymbol(event)">
+          <div class="ticker-combo">
+            <input id="inp-symbol" type="text" placeholder="TICKER or company…" autocomplete="off" spellcheck="false"
+              maxlength="20" required role="combobox" aria-autocomplete="list" aria-expanded="false"
+              aria-controls="ticker-dropdown" />
+            <button type="button" class="ticker-chevron" id="ticker-chevron-btn" tabindex="-1"
+              aria-label="Toggle ticker list">&#9660;</button>
+            <div id="ticker-dropdown" role="listbox"></div>
+          </div>
+          <input id="inp-alert" type="number" placeholder="alert $" step="0.01" min="0" />
+          <button type="submit" class="primary" id="btn-add">+ Add</button>
+        </form>
+        <button class="mark-all" id="btn-mark-all" onclick="handleMarkAll()">
+          &#10003; Mark all seen
+        </button>
+      </div>
+
+      <!-- Watchlist Column Headers -->
+      <div class="watchlist-thead" aria-hidden="true">
+        <div class="th-cell th-sym">Ticker</div>
+        <div class="th-cell th-price">Live Price</div>
+        <div class="th-cell th-pct">% Move</div>
+        <div class="th-cell th-reasons">Signal Reasoning</div>
+        <div class="th-cell th-alert">Alert Target</div>
+        <div class="th-cell th-actions">Actions</div>
+      </div>
+
+      <div id="feed">
+        <div class="empty-state">Loading&hellip;</div>
+      </div>
+
+    </div><!-- /page-watchlist -->
+
+  </div><!-- /app -->
+
+  <div id="toast"></div>
+  <div id="alert-stack"></div>
+
+  <!-- Separated Application Logic -->
+  <script src="/js/app.js"></script>
 </body>
+
 </html>

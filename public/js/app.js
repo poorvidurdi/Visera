@@ -10,31 +10,31 @@
      POST   /api/ack-all/:userId
    ========================================================================= */
 
-const POLL_MS     = 5000;
-const BUCKET_ORD  = ['significant', 'notable', 'new', 'quiet'];
+const POLL_MS = 5000;
+const BUCKET_ORD = ['significant', 'notable', 'new', 'quiet'];
 const BUCKET_META = {
-  significant: { label: 'Significant',  cls: 'bucket-sig' },
-  notable:     { label: 'Notable',      cls: 'bucket-notable' },
-  new:         { label: 'New / Unseen', cls: 'bucket-new' },
-  quiet:       { label: 'Quiet',        cls: 'bucket-quiet' },
+  significant: { label: 'Significant', cls: 'bucket-sig' },
+  notable: { label: 'Notable', cls: 'bucket-notable' },
+  new: { label: 'New / Unseen', cls: 'bucket-new' },
+  quiet: { label: 'Quiet', cls: 'bucket-quiet' },
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
 
-let userId    = null;
+let userId = null;
 let pollTimer = null;
 
 // WebSocket live-tick state
-let ws              = null;   // active WebSocket (or null)
-let wsReconnTimer   = null;   // pending reconnect setTimeout handle
-let wsWatchedSyms   = [];     // symbols currently subscribed on the socket
-let wsInitialised   = false;  // true after first successful /api/changes fetch
+let ws = null;   // active WebSocket (or null)
+let wsReconnTimer = null;   // pending reconnect setTimeout handle
+let wsWatchedSyms = [];     // symbols currently subscribed on the socket
+let wsInitialised = false;  // true after first successful /api/changes fetch
 
 // ── Ticker combobox state ──────────────────────────────────────────────────
-let ddSymbols   = [];        // [{ symbol, name }] – full list from /api/symbols
+let ddSymbols = [];        // [{ symbol, name }] – full list from /api/symbols
 let ddWatchlist = new Set(); // symbols already in the watchlist (excluded from dropdown)
-let ddActive    = -1;        // index of keyboard-highlighted item (-1 = none)
-let ddOpen      = false;
+let ddActive = -1;        // index of keyboard-highlighted item (-1 = none)
+let ddOpen = false;
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 
@@ -74,37 +74,37 @@ const ALERT_COOLDOWN_MS = 30000; // 30 seconds per symbol
  * @param {{ symbol, price, bucket, score, reasons, pct }} msg
  */
 function fireAlertNotification(msg) {
-  var sym  = msg.symbol || '?';
-  var now  = Date.now();
+  var sym = msg.symbol || '?';
+  var now = Date.now();
 
   // Dedupe: skip if we already alerted for this symbol within the cooldown window
   if (alertCooldowns[sym] && (now - alertCooldowns[sym]) < ALERT_COOLDOWN_MS) return;
   alertCooldowns[sym] = now;
 
-  var price    = msg.price != null ? fmtPrice(Number(msg.price)) : '—';
-  var pct      = msg.pct != null ? (Number(msg.pct) >= 0 ? '+' : '') + Number(msg.pct).toFixed(2) + '%' : '';
+  var price = msg.price != null ? fmtPrice(Number(msg.price)) : '—';
+  var pct = msg.pct != null ? (Number(msg.pct) >= 0 ? '+' : '') + Number(msg.pct).toFixed(2) + '%' : '';
   var sigClass = msg.signalClassification;
   var topReason = (sigClass && sigClass.narrative)
     ? sigClass.narrative
     : (Array.isArray(msg.reasons) && msg.reasons.length ? shortR(msg.reasons[0]) : msg.bucket);
 
-  var prefix   = (sigClass && sigClass.type === 'idiosyncratic')
-    ? '⚡ [Idiosyncratic] '
-    : (sigClass && sigClass.type === 'macro' ? '🌐 [Macro] ' : '⚡ ');
-  var title    = prefix + sym + ' @ ' + price + ' (' + pct + ')';
-  var body     = topReason;
+  var prefix = (sigClass && sigClass.type === 'idiosyncratic')
+    ? ' Idiosyncratic '
+    : (sigClass && sigClass.type === 'macro' ? ' [Macro] ' : ' ');
+  var title = prefix + sym + ' @ ' + price + ' (' + pct + ')';
+  var body = topReason;
 
   // 1. Browser push notification (works when tab is backgrounded)
   if ('Notification' in window && Notification.permission === 'granted') {
     var n = new Notification(title, {
       body: body,
       icon: '/favicon.ico',
-      tag:  'visera-' + sym,   // replaces previous notification for same symbol
+      tag: 'visera-' + sym,   // replaces previous notification for same symbol
       renotify: true,
     });
     // Clicking the notification focuses the Visera tab
-    n.onclick = function() { window.focus(); n.close(); };
-    setTimeout(function() { n.close(); }, 8000);
+    n.onclick = function () { window.focus(); n.close(); };
+    setTimeout(function () { n.close(); }, 8000);
   }
 
   // 2. Always also show the in-page alert toast (visible if tab is active)
@@ -115,32 +115,32 @@ function fireAlertNotification(msg) {
 
 async function initTickerCombo() {
   try {
-    const res  = await api('/api/symbols');
+    const res = await api('/api/symbols');
     const data = await res.json();
-    ddSymbols  = Array.isArray(data.symbols) ? data.symbols : [];
+    ddSymbols = Array.isArray(data.symbols) ? data.symbols : [];
   } catch (_) {
     ddSymbols = [];
   }
 
-  const inp  = document.getElementById('inp-symbol');
+  const inp = document.getElementById('inp-symbol');
   const drop = document.getElementById('ticker-dropdown');
   const chev = document.getElementById('ticker-chevron-btn');
 
   // Open on focus
-  inp.addEventListener('focus', function() {
+  inp.addEventListener('focus', function () {
     ddFilterAndRender(inp.value);
     ddSetOpen(true);
   });
 
   // Filter as user types
-  inp.addEventListener('input', function() {
+  inp.addEventListener('input', function () {
     ddActive = -1;
     ddFilterAndRender(inp.value);
     ddSetOpen(true);
   });
 
   // Keyboard navigation
-  inp.addEventListener('keydown', function(e) {
+  inp.addEventListener('keydown', function (e) {
     if (!ddOpen) {
       if (e.key === 'ArrowDown') { ddFilterAndRender(inp.value); ddSetOpen(true); }
       return;
@@ -166,7 +166,7 @@ async function initTickerCombo() {
   });
 
   // Chevron toggle
-  chev.addEventListener('mousedown', function(e) {
+  chev.addEventListener('mousedown', function (e) {
     e.preventDefault(); // prevent input losing focus
     if (ddOpen) {
       ddSetOpen(false);
@@ -178,7 +178,7 @@ async function initTickerCombo() {
   });
 
   // Close when clicking outside
-  document.addEventListener('mousedown', function(e) {
+  document.addEventListener('mousedown', function (e) {
     const combo = document.querySelector('.ticker-combo');
     if (combo && !combo.contains(e.target)) {
       ddSetOpen(false);
@@ -186,7 +186,7 @@ async function initTickerCombo() {
   });
 
   // Delegate clicks on dropdown items
-  drop.addEventListener('mousedown', function(e) {
+  drop.addEventListener('mousedown', function (e) {
     e.preventDefault(); // prevent input losing focus
     const item = e.target.closest('.dd-item');
     if (item) ddSelectItem(item, inp);
@@ -199,10 +199,10 @@ async function initTickerCombo() {
  */
 function ddFilterAndRender(query) {
   const drop = document.getElementById('ticker-dropdown');
-  const q    = (query || '').trim().toUpperCase();
+  const q = (query || '').trim().toUpperCase();
 
   // First exclude symbols already on the watchlist
-  const available = ddSymbols.filter(function(s) {
+  const available = ddSymbols.filter(function (s) {
     return !ddWatchlist.has(s.symbol);
   });
 
@@ -211,14 +211,14 @@ function ddFilterAndRender(query) {
     // Show all available (non-watchlisted) symbols when query is empty
     filtered = available;
   } else {
-    filtered = available.filter(function(s) {
+    filtered = available.filter(function (s) {
       return s.symbol.includes(q) || s.name.toUpperCase().includes(q);
     });
   }
 
   if (filtered.length === 0) {
     // Check if the query matches something that's already been added
-    const alreadyAdded = q && ddSymbols.some(function(s) {
+    const alreadyAdded = q && ddSymbols.some(function (s) {
       return (s.symbol.includes(q) || s.name.toUpperCase().includes(q)) && ddWatchlist.has(s.symbol);
     });
     if (alreadyAdded) {
@@ -231,13 +231,13 @@ function ddFilterAndRender(query) {
     return;
   }
 
-  drop.innerHTML = filtered.map(function(s) {
-    const symHL  = ddHighlightText(s.symbol, q);
+  drop.innerHTML = filtered.map(function (s) {
+    const symHL = ddHighlightText(s.symbol, q);
     const nameHL = ddHighlightText(s.name, q);
     return (
       '<div class="dd-item" data-symbol="' + esc(s.symbol) + '" role="option" aria-selected="false">' +
-        '<span class="dd-sym">'  + symHL  + '</span>' +
-        '<span class="dd-name">' + nameHL + '</span>' +
+      '<span class="dd-sym">' + symHL + '</span>' +
+      '<span class="dd-name">' + nameHL + '</span>' +
       '</div>'
     );
   }).join('');
@@ -262,7 +262,7 @@ function ddHighlightText(text, query) {
  * Update active highlight class; scroll item into view.
  */
 function ddHighlight(items, activeIdx) {
-  items.forEach(function(el, i) {
+  items.forEach(function (el, i) {
     el.classList.toggle('active', i === activeIdx);
     if (i === activeIdx) el.scrollIntoView({ block: 'nearest' });
   });
@@ -283,10 +283,10 @@ function ddSelectItem(itemEl, inp) {
  * Open or close the dropdown and keep aria-expanded in sync.
  */
 function ddSetOpen(open) {
-  ddOpen  = open;
+  ddOpen = open;
   ddActive = -1;
   const drop = document.getElementById('ticker-dropdown');
-  const inp  = document.getElementById('inp-symbol');
+  const inp = document.getElementById('inp-symbol');
   const chev = document.getElementById('ticker-chevron-btn');
   if (!drop || !inp || !chev) return;
   drop.classList.toggle('open', open);
@@ -299,7 +299,7 @@ function ddSetOpen(open) {
 async function initSession() {
   const stored = localStorage.getItem('visera_userId');
   try {
-    const res  = await api('/api/session', {
+    const res = await api('/api/session', {
       method: 'POST',
       body: JSON.stringify({ userId: stored || undefined }),
     });
@@ -330,7 +330,7 @@ function schedulePoll() {
 
 async function fetchAndRender() {
   try {
-    const res  = await api('/api/changes/' + userId);
+    const res = await api('/api/changes/' + userId);
     const data = await res.json();
     const changes = data.changes || [];
 
@@ -342,19 +342,20 @@ async function fetchAndRender() {
     setStatus('live', 'updated ' + fmtTime());
 
     // Keep dropdown watchlist exclusion set in sync
-    ddWatchlist = new Set(changes.map(function(c) { return c.symbol; }));
+    ddWatchlist = new Set(changes.map(function (c) { return c.symbol; }));
 
     // Update live stat counters on the Overview page
     updateOverviewStats(changes);
 
     // ── WebSocket bootstrap / resubscribe ──────────────────────────────────
-    const syms = changes.map(function(c) { return c.symbol; });
+    const syms = changes.map(function (c) { return c.symbol; });
     wsWatchedSyms = syms;
 
     if (!wsInitialised) {
       wsInitialised = true;
       wsConnect();
     } else {
+      syncDirectBinanceStreams(syms);
       wsSend({ type: 'subscribe', symbols: syms, userId: userId }); // re-subscribe (list may have changed)
     }
   } catch (e) {
@@ -397,27 +398,92 @@ function wsSetStatus(state, label) {
   tx.textContent = label;
 }
 
+// Map of direct client-side Binance WebSockets for USDT symbols
+const directSockets = new Map();
+
+/**
+ * Ensures direct browser WebSockets are connected to Binance for any USDT symbols.
+ * This guarantees real-time sub-second streaming ticks directly in the browser,
+ * even when hosted on serverless environments like Vercel where backend WebSockets are unavailable.
+ */
+function syncDirectBinanceStreams(symbols) {
+  if (!('WebSocket' in window)) return;
+  const usdtSyms = (symbols || []).filter(function (s) {
+    return typeof s === 'string' && s.toUpperCase().endsWith('USDT');
+  }).map(function (s) { return s.toUpperCase(); });
+
+  const activeSet = new Set(usdtSyms);
+
+  // Close sockets no longer in watchlist
+  for (const [sym, sock] of directSockets.entries()) {
+    if (!activeSet.has(sym)) {
+      try { sock.close(); } catch (_) {}
+      directSockets.delete(sym);
+    }
+  }
+
+  // Open sockets for newly added USDT pairs
+  for (const sym of usdtSyms) {
+    if (directSockets.has(sym)) continue;
+
+    try {
+      const streamUrl = 'wss://stream.binance.com:9443/ws/' + sym.toLowerCase() + '@ticker';
+      const bws = new WebSocket(streamUrl);
+
+      bws.addEventListener('open', function () {
+        wsSetStatus('live', 'live (streaming)');
+      });
+
+      bws.addEventListener('message', function (event) {
+        try {
+          const d = JSON.parse(event.data);
+          if (d && d.c) {
+            const price = parseFloat(d.c);
+            if (!isNaN(price) && price > 0) {
+              applyTick({ symbol: sym, price: price });
+            }
+          }
+        } catch (_) {}
+      });
+
+      bws.addEventListener('close', function () {
+        directSockets.delete(sym);
+      });
+
+      directSockets.set(sym, bws);
+    } catch (_) {}
+  }
+}
+
 /**
  * Open the WebSocket and wire up all handlers.
  * Calling this again while a socket is already open is a no-op (guarded by
  * readyState check) so it is safe to call from reconnect paths.
  */
 function wsConnect() {
+  // Sync client-side live streaming sockets for USDT symbols
+  syncDirectBinanceStreams(wsWatchedSyms);
+
   // Prevent double-connect if called while a socket is already alive
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
   clearTimeout(wsReconnTimer);
   wsSetStatus('reconnecting', 'connecting…');
 
-  ws = new WebSocket(wsUrl());
+  try {
+    ws = new WebSocket(wsUrl());
+  } catch (_) {
+    ws = null;
+    return;
+  }
 
-  ws.addEventListener('open', function() {
+  ws.addEventListener('open', function () {
     wsSetStatus('live', 'live');
     // Send current symbol list immediately on (re)connect; include userId for server-side crossing checks
     wsSend({ type: 'subscribe', symbols: wsWatchedSyms, userId: userId });
   });
 
-  ws.addEventListener('message', function(event) {
+  ws.addEventListener('message', function (event) {
     var msg;
     try { msg = JSON.parse(event.data); } catch { return; }
 
@@ -431,15 +497,20 @@ function wsConnect() {
     }
   });
 
-  ws.addEventListener('close', function() {
-    wsSetStatus('reconnecting', 'reconnecting…');
+  ws.addEventListener('close', function () {
+    // If we have direct Binance streams open, keep status active
+    if (directSockets.size > 0) {
+      wsSetStatus('live', 'live (streaming)');
+    } else {
+      wsSetStatus('reconnecting', 'reconnecting…');
+    }
     ws = null;
-    // Auto-reconnect with fixed 1.5s backoff
+    // Auto-reconnect with fixed backoff
     wsReconnTimer = setTimeout(wsConnect, WS_RECONNECT_MS);
   });
 
-  ws.addEventListener('error', function() {
-    // 'close' fires right after 'error', so reconnect logic lives there
+  ws.addEventListener('error', function () {
+    // 'close' fires right after 'error'
   });
 }
 
@@ -460,7 +531,7 @@ function applyTick(snap) {
   if (!row) return;
 
   var priceCell = row.querySelector('.cell-price');
-  var pctCell   = row.querySelector('.cell-pct');
+  var pctCell = row.querySelector('.cell-pct');
 
   if (priceCell && snap.price != null && !isNaN(Number(snap.price))) {
     priceCell.textContent = fmtPrice(Number(snap.price));
@@ -468,10 +539,10 @@ function applyTick(snap) {
 
   // Only update the pct cell if the server sends pctMove on the tick
   if (pctCell && snap.pctMove != null && !isNaN(Number(snap.pctMove))) {
-    var pct      = Number(snap.pctMove);
-    var pctCls   = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
+    var pct = Number(snap.pctMove);
+    var pctCls = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
     var pctArrow = pct > 0.001 ? '▲' : pct < -0.001 ? '▼' : '';
-    pctCell.className   = 'cell cell-pct ' + pctCls;
+    pctCell.className = 'cell cell-pct ' + pctCls;
     pctCell.textContent = pctArrow + fmtPct(pct);
   }
 
@@ -505,8 +576,8 @@ function render(changes) {
     const m = BUCKET_META[bucket];
     html +=
       '<div class="section-head ' + m.cls + '">' +
-        '<span class="bucket-label">' + m.label + '</span>' +
-        '<span class="bucket-count">' + items.length + '</span>' +
+      '<span class="bucket-label">' + m.label + '</span>' +
+      '<span class="bucket-count">' + items.length + '</span>' +
       '</div>' +
       '<ul class="symbol-list">';
     for (const item of items) html += buildRow(item, bucket);
@@ -515,24 +586,24 @@ function render(changes) {
 
   feed.innerHTML = html;
 
-  feed.querySelectorAll('.alert-input').forEach(function(inp) {
+  feed.querySelectorAll('.alert-input').forEach(function (inp) {
     inp.addEventListener('input', onAlertChange);
     inp.addEventListener('keydown', onAlertKey);
   });
 }
 
 function buildRow(item, bucket) {
-  var m        = BUCKET_META[bucket];
-  var sym      = item.symbol;
-  var snap     = item.snapshot;
-  var price    = snap && snap.price != null ? Number(snap.price) : NaN;
-  var pct      = Number(item.pctMoveSinceLastSeen || 0);
-  var alert    = item.alertPrice != null ? Number(item.alertPrice) : '';
-  var reasons  = Array.isArray(item.reasons) ? item.reasons : [];
+  var m = BUCKET_META[bucket];
+  var sym = item.symbol;
+  var snap = item.snapshot;
+  var price = snap && snap.price != null ? Number(snap.price) : NaN;
+  var pct = Number(item.pctMoveSinceLastSeen || 0);
+  var alert = item.alertPrice != null ? Number(item.alertPrice) : '';
+  var reasons = Array.isArray(item.reasons) ? item.reasons : [];
 
   var priceStr = isNaN(price) ? '&mdash;' : fmtPrice(price);
-  var pctStr   = fmtPct(pct);
-  var pctCls   = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
+  var pctStr = fmtPct(pct);
+  var pctCls = pct > 0.001 ? 'pos' : pct < -0.001 ? 'neg' : 'flat';
   var pctArrow = pct > 0.001 ? '&#9650;' : pct < -0.001 ? '&#9660;' : '';
 
   var sigClass = item.signalClassification;
@@ -542,16 +613,16 @@ function buildRow(item, bucket) {
   if (sigClass) {
     if (sigClass.type === 'idiosyncratic') {
       var excessStr = (sigClass.excessReturn >= 0 ? '+' : '') + sigClass.excessReturn.toFixed(1) + '%';
-      classBadge = '<span class="reason-tag badge-idiosyncratic" title="' + esc(sigClass.narrative) + '">⚡ Idiosyncratic (' + excessStr + ')</span>';
+      classBadge = '<span class="reason-tag badge-idiosyncratic" title="' + esc(sigClass.narrative) + '">Idiosyncratic (' + excessStr + ')</span>';
       narrativeHtml = '<div class="signal-narrative text-idiosyncratic">' + esc(sigClass.narrative) + '</div>';
     } else if (sigClass.type === 'macro') {
-      classBadge = '<span class="reason-tag badge-macro" title="' + esc(sigClass.narrative) + '">🌐 Macro-driven</span>';
+      classBadge = '<span class="reason-tag badge-macro" title="' + esc(sigClass.narrative) + '">Macro-driven</span>';
       narrativeHtml = '<div class="signal-narrative text-macro">' + esc(sigClass.narrative) + '</div>';
     }
   }
 
   // Filter out raw narrative strings from reasons to prevent clutter
-  var displayReasons = reasons.filter(function(r) {
+  var displayReasons = reasons.filter(function (r) {
     return !r.includes('while market was') && !r.includes('so was the market') && !r.includes('vs market');
   });
 
@@ -560,7 +631,7 @@ function buildRow(item, bucket) {
     rHtml += classBadge;
   }
   if (displayReasons.length > 0) {
-    rHtml += displayReasons.map(function(r) {
+    rHtml += displayReasons.map(function (r) {
       return '<span class="reason-tag" title="' + esc(r) + '">' + esc(shortR(r)) + '</span>';
     }).join('');
   } else if (!classBadge) {
@@ -579,22 +650,22 @@ function buildRow(item, bucket) {
 
   return (
     '<li class="sym-row ' + m.cls + '" data-symbol="' + esc(sym) + '">' +
-      '<div class="row-main">' +
-        '<div class="cell cell-sym">'   + esc(sym)    + '</div>' +
-        '<div class="cell cell-price">' + priceStr    + '</div>' +
-        '<div class="cell cell-pct '   + pctCls + '">' + pctArrow + pctStr + '</div>' +
-        '<div class="cell cell-reasons">' + rHtml + '</div>' +
-        '<div class="cell cell-alert">' +
-          '<input class="alert-input" type="number" step="0.01" min="0" ' +
-            'placeholder="alert" value="' + alertVal + '" ' +
-            'data-orig="' + alertVal + '" data-sym="' + esc(sym) + '" />' +
-          '<button class="alert-save" onclick="doAlertSave(this)" title="Save">&#10003;</button>' +
-        '</div>' +
-        '<div class="cell cell-actions">' +
-          '<button class="seen-btn" onclick="doSeen(\'' + esc(sym) + '\')" title="Mark seen">&#10003;&nbsp;seen</button>' +
-          '<button class="danger-ghost" onclick="doRemove(\'' + esc(sym) + '\')" title="Remove">&#10005;</button>' +
-        '</div>' +
-      '</div>' +
+    '<div class="row-main">' +
+    '<div class="cell cell-sym">' + esc(sym) + '</div>' +
+    '<div class="cell cell-price">' + priceStr + '</div>' +
+    '<div class="cell cell-pct ' + pctCls + '">' + pctArrow + pctStr + '</div>' +
+    '<div class="cell cell-reasons">' + rHtml + '</div>' +
+    '<div class="cell cell-alert">' +
+    '<input class="alert-input" type="number" step="0.01" min="0" ' +
+    'placeholder="alert" value="' + alertVal + '" ' +
+    'data-orig="' + alertVal + '" data-sym="' + esc(sym) + '" />' +
+    '<button class="alert-save" onclick="doAlertSave(this)" title="Save">&#10003;</button>' +
+    '</div>' +
+    '<div class="cell cell-actions">' +
+    '<button class="seen-btn" onclick="doSeen(\'' + esc(sym) + '\')" title="Mark seen">&#10003;&nbsp;seen</button>' +
+    '<button class="danger-ghost" onclick="doRemove(\'' + esc(sym) + '\')" title="Remove">&#10005;</button>' +
+    '</div>' +
+    '</div>' +
     '</li>'
   );
 }
@@ -604,11 +675,11 @@ function buildRow(item, bucket) {
 async function handleAddSymbol(e) {
   e.preventDefault();
   ddSetOpen(false);   // close dropdown before submitting
-  var symEl   = document.getElementById('inp-symbol');
+  var symEl = document.getElementById('inp-symbol');
   var alertEl = document.getElementById('inp-alert');
-  var btn     = document.getElementById('btn-add');
+  var btn = document.getElementById('btn-add');
   // Take only the first token (guards against accidental extra text)
-  var sym     = symEl.value.trim().toUpperCase().split(/\s+/)[0];
+  var sym = symEl.value.trim().toUpperCase().split(/\s+/)[0];
   if (!sym) return;
   var ap = alertEl.value !== '' ? parseFloat(alertEl.value) : undefined;
   btn.disabled = true;
@@ -616,14 +687,14 @@ async function handleAddSymbol(e) {
     var body = { symbol: sym };
     if (ap != null && !isNaN(ap)) body.alertPrice = ap;
     var res = await api('/api/watchlist/' + userId, { method: 'POST', body: JSON.stringify(body) });
-    if (!res.ok) { var err = await res.json().catch(function(){return{};}); throw new Error(err.error || 'HTTP ' + res.status); }
+    if (!res.ok) { var err = await res.json().catch(function () { return {}; }); throw new Error(err.error || 'HTTP ' + res.status); }
     symEl.value = ''; alertEl.value = ''; symEl.focus();
     // Refresh symbol list in case a new one was added
     try {
       const sr = await api('/api/symbols');
       const sd = await sr.json();
       if (Array.isArray(sd.symbols)) ddSymbols = sd.symbols;
-    } catch(_) {}
+    } catch (_) { }
     await fetchAndRender();
   } catch (err) { toast('Add failed: ' + err.message); }
   finally { btn.disabled = false; }
@@ -676,13 +747,13 @@ async function doAlertSave(btn) {
   var sym = inp.dataset.sym;
   // Empty input → null (clears the alert). A zero value is treated the same
   // way because changeDetector requires alertPrice > 0 to fire.
-  var ap  = inp.value !== '' ? parseFloat(inp.value) : null;
+  var ap = inp.value !== '' ? parseFloat(inp.value) : null;
   if (ap !== null && isNaN(ap)) { toast('Invalid alert price'); return; }
   btn.disabled = true;
   try {
     var res = await api('/api/watchlist/' + userId + '/' + encodeURIComponent(sym) + '/alert',
       { method: 'PUT', body: JSON.stringify({ alertPrice: ap }) });
-    if (!res.ok) { var e = await res.json().catch(function(){return{};}); throw new Error(e.error || 'HTTP ' + res.status); }
+    if (!res.ok) { var e = await res.json().catch(function () { return {}; }); throw new Error(e.error || 'HTTP ' + res.status); }
     inp.dataset.orig = inp.value;
     btn.classList.remove('visible');
     await fetchAndRender();
@@ -704,24 +775,25 @@ function api(path, opts) {
  * @param {'overview'|'watchlist'} name
  */
 function switchPage(name) {
+  var key = String(name || 'overview').toLowerCase();
   // Update tab buttons
-  document.querySelectorAll('.tab-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.id === 'tab-' + name);
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.id === 'tab-' + key);
   });
   // Show/hide pages
-  document.querySelectorAll('.page').forEach(function(pg) {
-    pg.classList.toggle('active', pg.id === 'page-' + name);
+  document.querySelectorAll('.page').forEach(function (pg) {
+    pg.classList.toggle('active', pg.id === 'page-' + key);
   });
   // Persist preference
-  try { localStorage.setItem('visera_page', name); } catch(_) {}
+  try { localStorage.setItem('visera_page', key); } catch (_) { }
 }
 
 // Restore last-visited tab on page load
-(function() {
+(function () {
   try {
-    var saved = localStorage.getItem('visera_page');
+    var saved = (localStorage.getItem('visera_page') || '').toLowerCase();
     if (saved === 'watchlist' || saved === 'overview') switchPage(saved);
-  } catch(_) {}
+  } catch (_) { }
 })();
 
 /**
@@ -730,17 +802,17 @@ function switchPage(name) {
  * @param {Array} changes  The changes array from /api/changes
  */
 function updateOverviewStats(changes) {
-  var total   = changes.length;
-  var sigCnt  = changes.filter(function(c) { return c.bucket === 'significant'; }).length;
-  var alrts   = changes.filter(function(c) { return c.alertPrice != null && c.alertPrice > 0; }).length;
+  var total = changes.length;
+  var sigCnt = changes.filter(function (c) { return c.bucket === 'significant'; }).length;
+  var alrts = changes.filter(function (c) { return c.alertPrice != null && c.alertPrice > 0; }).length;
 
-  var elSym   = document.getElementById('ov-stat-symbols');
-  var elSig   = document.getElementById('ov-stat-sig');
+  var elSym = document.getElementById('ov-stat-symbols');
+  var elSig = document.getElementById('ov-stat-sig');
   var elAlrts = document.getElementById('ov-stat-alerts');
 
-  if (elSym)   elSym.textContent   = total > 0 ? total : (ddSymbols.length ? ddSymbols.length : '13+');
-  if (elSig)   elSig.textContent   = sigCnt  || '0';
-  if (elAlrts) elAlrts.textContent = alrts   || '0';
+  if (elSym) elSym.textContent = total > 0 ? total : (ddSymbols.length ? ddSymbols.length : '13+');
+  if (elSig) elSig.textContent = sigCnt || '0';
+  if (elAlrts) elAlrts.textContent = alrts || '0';
 }
 
 // ── Status ─────────────────────────────────────────────────────────────────
@@ -758,7 +830,7 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 5000);
+  toastTimer = setTimeout(function () { el.classList.remove('show'); }, 5000);
 }
 
 /**
@@ -780,16 +852,16 @@ function alertToast(sym, price, pct, reason, bucket) {
 
   card.innerHTML =
     '<div class="alert-card-head">' +
-      '<span class="alert-card-sym">⚡ ' + esc(sym) + '</span>' +
-      '<span class="alert-card-price">' + esc(price) + '</span>' +
-      '<span class="alert-card-pct">'   + esc(pct)   + '</span>' +
+    '<span class="alert-card-sym">⚡ ' + esc(sym) + '</span>' +
+    '<span class="alert-card-price">' + esc(price) + '</span>' +
+    '<span class="alert-card-pct">' + esc(pct) + '</span>' +
     '</div>' +
     '<div class="alert-card-reason">' + esc(reason) + '</div>';
 
-  card.addEventListener('click', function() { dismiss(card); });
+  card.addEventListener('click', function () { dismiss(card); });
   stack.appendChild(card);
 
-  var dismissTimer = setTimeout(function() { dismiss(card); }, 8000);
+  var dismissTimer = setTimeout(function () { dismiss(card); }, 8000);
 
   function dismiss(el) {
     clearTimeout(dismissTimer);
@@ -814,7 +886,7 @@ function shortR(r) {
     .replace('Volatility-normalized price move', 'Vol-norm move')
     .replace('Volume anomaly detected', 'Vol anomaly')
     .replace('Crossed 52-week high', '52w high x')
-    .replace('Crossed 52-week low',  '52w low x')
+    .replace('Crossed 52-week low', '52w low x')
     .replace(/Crossed alert price \(([^)]+)\)/, 'Alert @ $1');
 }
 
@@ -823,5 +895,5 @@ function fmtTime() {
 }
 
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }

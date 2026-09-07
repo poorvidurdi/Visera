@@ -144,9 +144,23 @@ app.put('/api/watchlist/:userId/:symbol/alert', (req, res) => {
  * Sorted: significant > notable > new > quiet, then score desc within bucket.
  * Response: { userId, changes: [...] }
  */
-app.get('/api/changes/:userId', (req, res) => {
+app.get('/api/changes/:userId', async (req, res) => {
   const { userId } = req.params;
   const watchlist  = db.getWatchlist(userId);
+
+  // In serverless/cold-start environments, ensure all USDT symbols have initialized their snapshot
+  for (const item of watchlist) {
+    if (item.symbol && item.symbol.toUpperCase().endsWith('USDT')) {
+      const snap = feed.getSnapshot(item.symbol);
+      if (!snap || snap.price === 0) {
+        feed.ensureSymbol(item.symbol);
+        const bState = feed.binanceAdapter && feed.binanceAdapter.states.get(item.symbol.toUpperCase());
+        if (bState && bState.initPromise) {
+          try { await Promise.race([bState.initPromise, new Promise(r => setTimeout(r, 1200))]); } catch (_) {}
+        }
+      }
+    }
+  }
 
   // Compute market benchmark (SPY) move for macro vs idiosyncratic signal decomposition
   const benchSnap = feed.getSnapshot('SPY');
